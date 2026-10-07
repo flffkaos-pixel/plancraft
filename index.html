@@ -23,6 +23,13 @@
 <meta name="twitter:title" content="PlanCraft — 2D·3D Floor Plan Designer">
 <meta name="twitter:description" content="Draw the plan, then walk through it in 3D. No sign-up, no install.">
 <meta name="twitter:image" content="https://plancraft-one.vercel.app/assets/og.png">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="keywords" content="인테리어 도면, 평면도 그리기, 2D 3D 도면, 가구 배치, 홈디자인, 도면 치수 측정, 방 배치도, floor plan maker, interior design tool, 間取り作成">
+<meta name="author" content="PlanCraft">
+<meta name="application-name" content="PlanCraft">
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="assets/favicon-48.png" sizes="48x48" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;700&display=swap">
@@ -323,6 +330,69 @@ footer{padding:56px 0 34px;border-top:1px solid var(--line);background:#08090b}
   .rv{opacity:1;transform:none}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://plancraft-one.vercel.app/#website",
+      "url": "https://plancraft-one.vercel.app/",
+      "name": "PlanCraft",
+      "inLanguage": ["ko", "en", "ja"],
+      "publisher": { "@id": "https://plancraft-one.vercel.app/#app" }
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://plancraft-one.vercel.app/#app",
+      "url": "https://plancraft-one.vercel.app/",
+      "name": "PlanCraft",
+      "alternateName": "플랜크래프트",
+      "image": "https://plancraft-one.vercel.app/assets/og.png",
+      "description": "가입 없이 브라우저에서 바로 쓰는 2D·3D 인테리어 도면 도구. 가구 배치, 벽 철거, 치수 측정, 3D 뷰와 1인칭 모드, 자재 비용 산정까지 한 화면에서 처리합니다.",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Any (web browser)",
+      "browserRequirements": "Requires JavaScript and WebGL",
+      "inLanguage": ["ko", "en", "ja"],
+      "isAccessibleForFree": true,
+      "featureList": "2D 평면 편집, 3D 뷰, 1인칭 모드, 치수 측정, 벽 철거, 자재 비용 산정, PNG·JSON 내보내기, 한국어·영어·일본어 지원",
+      "screenshot": "https://plancraft-one.vercel.app/assets/og.png",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://plancraft-one.vercel.app/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "무료인가요?",
+          "acceptedAnswer": { "@type": "Answer", "text": "네, 완전 무료입니다. 회원가입도, 결제도 없습니다. 모든 기능을 제한 없이 사용할 수 있습니다." }
+        },
+        {
+          "@type": "Question",
+          "name": "내 데이터는 어디에 저장되나요?",
+          "acceptedAnswer": { "@type": "Answer", "text": "브라우저의 로컬 저장소에만 저장됩니다. 서버로 전송되지 않으며, JSON 파일로 내보내면 원하는 곳에 보관하거나 다른 기기에서 불러올 수 있습니다." }
+        },
+        {
+          "@type": "Question",
+          "name": "모바일에서도 되나요?",
+          "acceptedAnswer": { "@type": "Answer", "text": "됩니다. 터치 드래그로 가구를 옮길 수 있고, 3D 모드에서는 가상 조이스틱으로 이동합니다. 다만 1인칭 조작은 키보드·마우스가 더 편합니다." }
+        },
+        {
+          "@type": "Question",
+          "name": "3D 화면이 뜨지 않아요",
+          "acceptedAnswer": { "@type": "Answer", "text": "3D 엔진은 CDN에서 불러오므로 처음 열 때 인터넷 연결이 필요합니다. 잠시 후 다시 시도하거나 페이지를 새로고침해 보세요." }
+        },
+        {
+          "@type": "Question",
+          "name": "상업적으로 쓸 수 있나요",
+          "acceptedAnswer": { "@type": "Answer", "text": "MIT 라이선스 기반 프로젝트입니다. 크레딧을 유지하는 한 자유롭게 사용할 수 있습니다." }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -362,9 +432,9 @@ footer{padding:56px 0 34px;border-top:1px solid var(--line);background:#08090b}
       <p class="lead rv" style="--d:.16s" data-i18n="hero.sub">가입도, 설치도 필요 없습니다. 가구를 끌어놓고 벽을 고치고, 한 번의 키 입력으로 3D 공간으로 전환하세요.</p>
       <div class="hero-cta rv" style="--d:.24s">
         <a class="btn btn-p" href="./app/" data-i18n="hero.cta1">무료로 시작하기</a>
-        <a class="btn btn-g" href="https://github.com/wy51ai/floorplan-3d" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.5 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg>
-          <span data-i18n="hero.cta2">GitHub에서 보기</span>
+        <a class="btn btn-g" href="#how">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M12 19l-6-6M12 19l6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="hero.cta2">사용법 보기</span>
         </a>
       </div>
       <div class="specs rv" style="--d:.32s">
@@ -586,11 +656,11 @@ footer{padding:56px 0 34px;border-top:1px solid var(--line);background:#08090b}
         </ul>
       </div>
       <div>
-        <h4 data-i18n="foot.s2">릴리스</h4>
+        <h4 data-i18n="foot.s2">안내</h4>
         <ul>
-          <li><a href="https://github.com/wy51ai/floorplan-3d" target="_blank" rel="noopener" data-i18n="foot.l2">원본 저장소</a></li>
-          <li><a href="https://github.com/wy51ai/floorplan-3d/blob/master/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
+          <li><a href="#how" data-i18n="nav.how">사용법</a></li>
           <li><a href="https://threejs.org/" target="_blank" rel="noopener">Three.js r160</a></li>
+          <li><span data-i18n="foot.l3">MIT 라이선스 · 상업적 이용 가능</span></li>
         </ul>
       </div>
     </div>
@@ -608,7 +678,7 @@ const DICT = {
     "hero.eye":"브라우저에서 바로 쓰는 2D·3D 도면 도구",
     "hero.h1":"도면을 그리고,<br>바로 <em>3D</em>로 확인하세요",
     "hero.sub":"가입도, 설치도 필요 없습니다. 가구를 끌어놓고 벽을 고치고, 한 번의 키 입력으로 3D 공간으로 전환하세요.",
-    "hero.cta1":"무료로 시작하기","hero.cta2":"GitHub에서 보기",
+    "hero.cta1":"무료로 시작하기","hero.cta2":"사용법 보기",
     "spec1":"가구 오브젝트","spec2":"/ 1:100 축척","spec3":"단위 측정","spec4":"내보내기",
     "feat.eye":"FEATURES","feat.h2":"도면 작업에 필요한 것만,<br>딱 필요한 만큼",
     "feat.sub":"2D 편집부터 3D 확인, 자재 견적까지 한 화면에서 끝납니다. 모든 처리는 당신의 브라우저 안에서 실행됩니다.",
@@ -626,7 +696,7 @@ const DICT = {
     "faq.h2":"자주 묻는 질문",
     "band.h2":"지금 바로 평면을 그려보세요","band.sub":"무료, 가입 없음, 브라우저에서 실행됩니다.","band.cta":"PlanCraft 열기",
     "foot.about":"브라우저에서 실행되는 2D·3D 인테리어 도면 도구. 도면 데이터는 서버로 전송되지 않으며 내 기기에만 저장됩니다.",
-    "foot.s1":"제품","foot.s2":"릴리스","foot.l1":"도구 열기","foot.l2":"원본 저장소",
+    "foot.s1":"제품","foot.s2":"안내","foot.l1":"도구 열기","foot.l3":"MIT 라이선스 · 상업적 이용 가능",
     "foot.note":"BASED ON WY51AI/FLOORPLAN-3D · MIT",
     "title":"PlanCraft — 2D·3D 인테리어 도면 도구",
     "desc":"가입 없이 브라우저에서 바로 쓰는 2D·3D 인테리어 도면 도구. 가구 배치, 벽 철거, 치수 측정, 3D 뷰와 1인칭 모드, 자재 비용 산정까지.",
@@ -644,7 +714,7 @@ const DICT = {
     "hero.eye":"2D & 3D floor planning in your browser",
     "hero.h1":"Draw the plan.<br>Step into <em>3D</em>.",
     "hero.sub":"No signup, no install. Drag in furniture, adjust walls, and switch to a full 3D scene with a single keypress.",
-    "hero.cta1":"Start designing — free","hero.cta2":"View on GitHub",
+    "hero.cta1":"Start designing — free","hero.cta2":"See how it works",
     "spec1":"furniture objects","spec2":"/ 1:100 scale","spec3":"units","spec4":"export",
     "feat.eye":"FEATURES","feat.h2":"Everything a floor plan needs,<br>nothing it doesn't",
     "feat.sub":"From 2D editing to 3D review and material estimates — all in one screen. Everything runs inside your browser.",
@@ -662,7 +732,7 @@ const DICT = {
     "faq.h2":"Frequently asked questions",
     "band.h2":"Start drawing your plan","band.sub":"Free, no signup, runs entirely in your browser.","band.cta":"Open PlanCraft",
     "foot.about":"A 2D & 3D interior floor planning tool that runs in your browser. Plans never leave your device — they are stored locally.",
-    "foot.s1":"Product","foot.s2":"Release","foot.l1":"Open the tool","foot.l2":"Original repository",
+    "foot.s1":"Product","foot.s2":"Info","foot.l1":"Open the tool","foot.l3":"MIT License · commercial use allowed",
     "foot.note":"BASED ON WY51AI/FLOORPLAN-3D · MIT",
     "title":"PlanCraft — 2D & 3D floor plan designer",
     "desc":"A free 2D & 3D interior floor planning tool that runs in your browser. Place furniture, remodel walls, measure, walk through in 3D and estimate material costs.",
@@ -680,7 +750,7 @@ const DICT = {
     "hero.eye":"ブラウザで使える 2D・3D 間取りツール",
     "hero.h1":"間取りを描いたら、<br>そのまま <em>3D</em> へ。",
     "hero.sub":"登録もインストールも不要。家具をドラッグして壁を調整、キー一発で 3D 空間に切り替えます。",
-    "hero.cta1":"無料で始める","hero.cta2":"GitHub で見る",
+    "hero.cta1":"無料で始める","hero.cta2":"使い方を見る",
     "spec1":"種類の家具","spec2":"/ 1:100 スケール","spec3":"単位で計測","spec4":"エクスポート",
     "feat.eye":"FEATURES","feat.h2":"間取りづくりに必要な機能を、<br>必要なだけ",
     "feat.sub":"2D 編集から 3D 確認、資材見積まで一つの画面で完結。すべてブラウザ内で処理されます。",
@@ -698,7 +768,7 @@ const DICT = {
     "faq.h2":"よくある質問",
     "band.h2":"いますぐ間取りを描こう","band.sub":"無料・登録不要、ブラウザ内で動作します。","band.cta":"PlanCraft を開く",
     "foot.about":"ブラウザで動く 2D・3D 間取りデザインツール。間取りデータがサーバーに送信されることはなく、端末内にのみ保存されます。",
-    "foot.s1":"製品","foot.s2":"リリース","foot.l1":"ツールを開く","foot.l2":"元のリポジトリ",
+    "foot.s1":"製品","foot.s2":"ご案内","foot.l1":"ツールを開く","foot.l3":"MITライセンス · 商用利用可",
     "foot.note":"BASED ON WY51AI/FLOORPLAN-3D · MIT",
     "title":"PlanCraft — 2D・3D 間取りデザインツール",
     "desc":"登録不要でブラウザから使える 2D・3D 間取りデザインツール。家具配置、壁の解体、寸法計測、3D 表示と一人称モード、資材コスト試算まで。",
