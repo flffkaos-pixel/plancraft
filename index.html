@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PlanCraft — 2D·3D 인테리어 도면 도구</title>
+<meta name="description" content="가입 없이 브라우저에서 바로 쓰는 2D·3D 인테리어 도면 도구. 가구 배치, 벽 철거, 치수 측정, 3D 뷰와 1인칭 모드, 자재 비용 산정까지.">
+<meta name="theme-color" content="#0a0b0d">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PlanCraft — 2D·3D 인테리어 도면 도구">
+<meta property="og:description" content="도면을 그리고, 바로 3D로 확인하세요. 가입도 설치도 필요 없습니다.">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root{
+  --ink:#0a0b0d; --ink2:#101217; --ink3:#171a21; --ink4:#1e222b;
+  --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.16);
+  --paper:#f2efe7; --fg:#e9e7e2; --muted:#959ba5;
+  --ember:#ff6a33; --ember-d:#e8551f; --ember-soft:rgba(255,106,51,.13);
+  --cyan:#56c8d8; --cyan-soft:rgba(86,200,216,.13);
+  --disp:'Bricolage Grotesque','Pretendard Variable',Pretendard,'Noto Sans JP',sans-serif;
+  --body:'Pretendard Variable',Pretendard,'Noto Sans JP',-apple-system,sans-serif;
+  --mono:'IBM Plex Mono','Pretendard Variable',monospace;
+  --pad:clamp(20px,5vw,64px);
+  --maxw:1240px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink); color:var(--fg); font-family:var(--body);
+  font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  overflow-x:hidden; position:relative;
+}
+::selection{background:var(--ember);color:#0a0b0d}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+
+/* ---------- atmosphere ---------- */
+.bg-grid{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px),
+    linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:120px 120px,120px 120px,24px 24px,24px 24px;
+  mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 20%,transparent 85%);
+  -webkit-mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 20%,transparent 85%);
+}
+.bg-glow{
+  position:fixed;top:-280px;left:50%;transform:translateX(-50%);
+  width:min(1100px,120vw);height:640px;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,rgba(255,106,51,.20),rgba(255,106,51,.06) 45%,transparent 70%);
+  filter:blur(20px);
+}
+.grain{
+  position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+main,header,footer{position:relative;z-index:2}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 var(--pad)}
+
+/* ---------- type ---------- */
+h1,h2,h3{font-family:var(--disp);font-weight:800;letter-spacing:-.03em;line-height:1.04}
+.eyebrow{
+  font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ember);display:inline-flex;align-items:center;gap:10px;
+}
+.eyebrow::before{content:"";width:26px;height:1px;background:var(--ember);display:block}
+.lead{color:var(--muted);font-size:clamp(15px,1.6vw,18.5px);line-height:1.7}
+.mono{font-family:var(--mono)}
+
+/* ---------- nav ---------- */
+.nav{
+  position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:22px;
+  padding:16px var(--pad);transition:.3s;border-bottom:1px solid transparent;
+}
+.nav.scrolled{background:rgba(10,11,13,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom-color:var(--line)}
+.logo{display:flex;align-items:center;gap:11px;font-family:var(--disp);font-weight:800;font-size:19px;letter-spacing:-.02em}
+.logo svg{width:30px;height:30px;flex:none}
+.nav-links{display:flex;gap:26px;margin-left:auto;font-size:14.5px;color:var(--muted)}
+.nav-links a{position:relative;transition:.2s}
+.nav-links a::after{content:"";position:absolute;left:0;bottom:-5px;width:0;height:1px;background:var(--ember);transition:.3s}
+.nav-links a:hover{color:var(--fg)}
+.nav-links a:hover::after{width:100%}
+.nav-right{display:flex;align-items:center;gap:12px}
+.langsel{display:flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;background:rgba(255,255,255,.03)}
+.langsel button{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;padding:7px 11px;
+  background:none;border:0;color:var(--muted);cursor:pointer;transition:.2s
+}
+.langsel button:hover{color:var(--fg)}
+.langsel button.on{background:var(--ember);color:#0a0b0d;font-weight:500}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  font-family:var(--body);font-weight:650;font-size:15px;padding:14px 26px;
+  border-radius:12px;cursor:pointer;border:1px solid transparent;transition:.25s;white-space:nowrap
+}
+.btn-p{background:var(--ember);color:#0a0b0d;box-shadow:0 8px 30px -12px rgba(255,106,51,.85)}
+.btn-p:hover{background:var(--ember-d);transform:translateY(-2px);box-shadow:0 16px 38px -14px rgba(255,106,51,.95)}
+.btn-g{background:rgba(255,255,255,.04);border-color:var(--line2);color:var(--fg)}
+.btn-g:hover{background:rgba(255,255,255,.09);transform:translateY(-2px)}
+.btn-sm{padding:10px 18px;font-size:14px;border-radius:10px}
+.btn svg{width:17px;height:17px}
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(30px,5vw,70px);align-items:center;padding:clamp(46px,7vw,90px) 0 clamp(50px,6vw,84px)}
+.hero h1{font-size:clamp(38px,5.6vw,76px);margin:22px 0 20px}
+.hero h1 em{font-style:normal;color:var(--ember);position:relative;display:inline-block}
+.hero h1 em::after{
+  content:"";position:absolute;left:0;right:0;bottom:.06em;height:.09em;background:var(--cyan);
+  transform:scaleX(0);transform-origin:left;animation:uline .9s .9s cubic-bezier(.65,0,.35,1) forwards
+}
+@keyframes uline{to{transform:scaleX(1)}}
+.hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin:32px 0 34px}
+.specs{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);padding-top:20px}
+.specs div{font-family:var(--mono);font-size:12.5px;color:var(--muted);padding:2px 18px 2px 0;margin-right:18px;border-right:1px solid var(--line);letter-spacing:.02em}
+.specs div:last-child{border:0}
+.specs b{color:var(--fg);font-weight:500}
+
+/* hero visual */
+.stage{position:relative;perspective:1200px}
+.plan-card{
+  position:relative;background:linear-gradient(160deg,#14171d,#0d0f13);
+  border:1px solid var(--line2);border-radius:18px;padding:18px;
+  box-shadow:0 40px 90px -40px #000,0 0 0 1px rgba(255,255,255,.03) inset;
+  transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.3,1)
+}
+.plan-card::before{
+  content:"";position:absolute;inset:0;border-radius:18px;pointer-events:none;
+  background:radial-gradient(420px circle at var(--mx,50%) var(--my,0%),rgba(255,106,51,.13),transparent 62%);opacity:0;transition:opacity .4s
+}
+.plan-card:hover::before{opacity:1}
+.card-bar{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;padding:0 4px 12px}
+.card-bar i{width:9px;height:9px;border-radius:50%;background:#2a2f38;display:block}
+.card-bar .tag{margin-left:auto;color:var(--cyan);border:1px solid rgba(86,200,216,.35);border-radius:5px;padding:2px 7px;font-style:normal}
+.plan-svg{width:100%;height:auto;display:block;border-radius:10px;background:#0b0d11}
+.chip{
+  position:absolute;font-family:var(--mono);font-size:11px;letter-spacing:.05em;
+  background:rgba(16,18,23,.92);border:1px solid var(--line2);border-radius:8px;
+  padding:7px 11px;backdrop-filter:blur(8px);color:var(--fg);
+  box-shadow:0 12px 30px -14px #000;animation:float 6s ease-in-out infinite
+}
+.chip.c1{top:-16px;right:20px;color:var(--ember);border-color:rgba(255,106,51,.4)}
+.chip.c2{bottom:-16px;left:24px;animation-delay:-3s;color:var(--cyan);border-color:rgba(86,200,216,.35)}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+
+/* draw-in animation */
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.5s cubic-bezier(.6,0,.3,1) forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.fadein{opacity:0;animation:fi .6s ease forwards}
+@keyframes fi{to{opacity:1}}
+.selpulse{animation:sp 2.6s ease-in-out infinite}
+@keyframes sp{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ---------- ticker ---------- */
+.ticker{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(255,255,255,.02);overflow:hidden;padding:15px 0}
+.tick-track{display:flex;width:max-content;animation:tick 34s linear infinite}
+.tick-track span{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:0 30px;display:flex;align-items:center;gap:30px}
+.tick-track span::after{content:"";width:5px;height:5px;background:var(--ember);border-radius:50%;display:block}
+@keyframes tick{to{transform:translateX(-50%)}}
+
+/* ---------- sections ---------- */
+section{padding:clamp(64px,9vw,120px) 0}
+.sec-head{max-width:760px;margin-bottom:clamp(36px,5vw,60px)}
+.sec-head h2{font-size:clamp(30px,4.2vw,54px);margin:18px 0 16px}
+
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+.card{
+  position:relative;overflow:hidden;background:linear-gradient(165deg,var(--ink3),var(--ink2));
+  border:1px solid var(--line);border-radius:16px;padding:28px;transition:.35s;
+  grid-column:span 2;min-height:220px;display:flex;flex-direction:column
+}
+.card.wide{grid-column:span 3}
+.card.full{grid-column:span 6;min-height:0;flex-direction:row;align-items:center;gap:26px;flex-wrap:wrap}
+.card::after{
+  content:"";position:absolute;inset:0;opacity:0;transition:.4s;pointer-events:none;
+  background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),rgba(255,106,51,.10),transparent 65%)
+}
+.card:hover{border-color:rgba(255,106,51,.4);transform:translateY(-4px)}
+.card:hover::after{opacity:1}
+.ic{
+  width:44px;height:44px;border-radius:11px;display:grid;place-items:center;margin-bottom:20px;
+  background:var(--ember-soft);border:1px solid rgba(255,106,51,.28);color:var(--ember);flex:none
+}
+.ic svg{width:22px;height:22px}
+.card h3{font-size:20px;margin-bottom:9px;letter-spacing:-.02em}
+.card p{color:var(--muted);font-size:14.5px;line-height:1.6}
+.card .num{position:absolute;right:22px;top:20px;font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.22);letter-spacing:.1em}
+.langs{display:flex;gap:12px;margin-left:auto;flex-wrap:wrap}
+.langs b{
+  font-family:var(--mono);font-weight:500;font-size:13px;padding:9px 16px;border-radius:9px;
+  border:1px solid var(--line2);background:rgba(255,255,255,.04);transition:.25s
+}
+.langs b:hover{border-color:var(--cyan);color:var(--cyan)}
+
+/* paper section */
+.paper{background:var(--paper);color:#1b1a17;position:relative;overflow:hidden}
+.paper::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,0,0,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.055) 1px,transparent 1px);
+  background-size:32px 32px
+}
+.paper .wrap{position:relative;z-index:2}
+.paper .eyebrow{color:#c2551f}
+.paper .eyebrow::before{background:#c2551f}
+.paper h2{color:#14130f}
+.paper .lead{color:#5d574c}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(18px,3vw,38px);position:relative}
+.steps::before{
+  content:"";position:absolute;top:36px;left:8%;right:8%;height:1px;
+  background:repeating-linear-gradient(90deg,#b9b1a0 0 8px,transparent 8px 16px)
+}
+.step{position:relative;background:rgba(255,255,255,.72);border:1px solid #ded7c7;border-radius:14px;padding:30px 26px;backdrop-filter:blur(3px)}
+.step .n{font-family:var(--disp);font-weight:800;font-size:40px;color:#c2551f;line-height:1;letter-spacing:-.04em}
+.step h3{font-size:19px;margin:16px 0 10px;color:#14130f}
+.step p{font-size:14.5px;color:#5d574c;line-height:1.65}
+.titleblock{
+  margin-top:44px;border:1px solid #cfc7b4;background:rgba(255,255,255,.6);
+  display:grid;grid-template-columns:repeat(4,1fr);font-family:var(--mono);font-size:11px;color:#5d574c
+}
+.titleblock div{padding:12px 16px;border-right:1px solid #cfc7b4}
+.titleblock div:last-child{border:0}
+.titleblock span{display:block;color:#9a927f;letter-spacing:.12em;font-size:9.5px;margin-bottom:4px;text-transform:uppercase}
+.titleblock b{color:#14130f;font-weight:500;font-size:12.5px}
+
+/* shortcuts */
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px 34px}
+.krow{display:flex;align-items:center;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}
+kbd{
+  font-family:var(--mono);font-size:12px;padding:5px 10px;border-radius:6px;min-width:44px;text-align:center;
+  background:linear-gradient(180deg,#23262e,#171a21);border:1px solid var(--line2);
+  border-bottom-width:2px;color:var(--fg);box-shadow:0 1px 0 rgba(255,255,255,.06) inset
+}
+.krow span{font-size:14.5px;color:var(--muted)}
+
+/* faq */
+.faq{max-width:840px}
+details{border-bottom:1px solid var(--line);padding:4px 0}
+summary{
+  list-style:none;cursor:pointer;padding:22px 46px 22px 0;position:relative;
+  font-family:var(--disp);font-weight:600;font-size:clamp(16px,2vw,19px);letter-spacing:-.01em;transition:.2s
+}
+summary::-webkit-details-marker{display:none}
+summary::after{
+  content:"";position:absolute;right:8px;top:50%;width:13px;height:13px;
+  background:linear-gradient(var(--ember),var(--ember)) center/13px 1.5px no-repeat,
+             linear-gradient(var(--ember),var(--ember)) center/1.5px 13px no-repeat;
+  transition:.3s;transform:translateY(-50%)
+}
+details[open] summary::after{transform:translateY(-50%) rotate(135deg)}
+summary:hover{color:var(--ember)}
+details p{color:var(--muted);font-size:15px;padding:0 40px 24px 0;line-height:1.7}
+
+/* cta band */
+.band{position:relative;overflow:hidden;text-align:center;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(255,106,51,.07),transparent 60%)}
+.band::before{
+  content:"";position:absolute;left:50%;top:-40%;transform:translateX(-50%);
+  width:760px;height:760px;background:radial-gradient(circle,rgba(255,106,51,.16),transparent 62%);pointer-events:none
+}
+.band h2{font-size:clamp(30px,4.6vw,58px);margin-bottom:18px}
+.band .lead{max-width:560px;margin:0 auto 34px}
+
+/* footer */
+footer{padding:56px 0 34px;border-top:1px solid var(--line);background:#08090b}
+.f-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:36px;padding-bottom:38px;border-bottom:1px solid var(--line)}
+.f-grid p{color:var(--muted);font-size:14px;margin-top:14px;max-width:320px;line-height:1.7}
+.f-grid h4{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg);margin-bottom:16px;font-weight:500}
+.f-grid ul{list-style:none;display:grid;gap:11px}
+.f-grid li a{color:var(--muted);font-size:14.5px;transition:.2s}
+.f-grid li a:hover{color:var(--ember)}
+.f-bot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:26px;font-family:var(--mono);font-size:11.5px;color:#6b7078;letter-spacing:.04em}
+
+/* reveal */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .8s cubic-bezier(.2,.7,.3,1),transform .8s cubic-bezier(.2,.7,.3,1);transition-delay:var(--d,0s)}
+.rv.in{opacity:1;transform:none}
+
+@media (max-width:980px){
+  .hero{grid-template-columns:1fr;padding-top:36px}
+  .stage{order:-1}
+  .nav-links{display:none}
+  .bento{grid-template-columns:repeat(2,1fr)}
+  .card,.card.wide{grid-column:span 1}
+  .card.full{grid-column:span 2;flex-direction:column;align-items:flex-start}
+  .langs{margin-left:0}
+  .steps{grid-template-columns:1fr}
+  .steps::before{display:none}
+  .titleblock{grid-template-columns:repeat(2,1fr)}
+  .titleblock div:nth-child(2){border-right:0}
+  .f-grid{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  .bento{grid-template-columns:1fr}
+  .card.full{grid-column:span 1}
+  .specs div{border:0;padding-right:0;margin-right:14px}
+  .nav{gap:12px}
+  .nav-right .btn{display:none}
+  .langsel button{padding:7px 9px}
+  .hero-cta .btn{flex:1 1 100%}
+  .band .btn{width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .rv{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<div class="grain"></div>
+
+<header class="nav" id="nav">
+  <a class="logo" href="./">
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="29" height="29" rx="6.5" stroke="rgba(255,255,255,.2)"/>
+      <path d="M7 25V7h11a5 5 0 0 1 0 10h-5" stroke="#ff6a33" stroke-width="2.6" stroke-linecap="square"/>
+      <path d="M19 17v8h6" stroke="#56c8d8" stroke-width="2.6" stroke-linecap="square"/>
+    </svg>
+    PlanCraft
+  </a>
+  <nav class="nav-links">
+    <a href="#features" data-i18n="nav.feat">기능</a>
+    <a href="#how" data-i18n="nav.how">사용법</a>
+    <a href="#keys" data-i18n="nav.keys">단축키</a>
+    <a href="#faq" data-i18n="nav.faq">FAQ</a>
+  </nav>
+  <div class="nav-right">
+    <div class="langsel" id="langsel">
+      <button data-lang="ko">KO</button>
+      <button data-lang="en">EN</button>
+      <button data-lang="ja">JA</button>
+    </div>
+    <a class="btn btn-p btn-sm" href="./app/" data-i18n="nav.cta">무료로 시작</a>
+  </div>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <div class="eyebrow rv" data-i18n="hero.eye">브라우저에서 바로 쓰는 2D·3D 도면 도구</div>
+      <h1 class="rv" style="--d:.08s" data-i18n-html="hero.h1">도면을 그리고,<br>바로 <em>3D</em>로 확인하세요</h1>
+      <p class="lead rv" style="--d:.16s" data-i18n="hero.sub">가입도, 설치도 필요 없습니다. 가구를 끌어놓고 벽을 고치고, 한 번의 키 입력으로 3D 공간으로 전환하세요.</p>
+      <div class="hero-cta rv" style="--d:.24s">
+        <a class="btn btn-p" href="./app/" data-i18n="hero.cta1">무료로 시작하기</a>
+        <a class="btn btn-g" href="https://github.com/wy51ai/floorplan-3d" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.5 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span data-i18n="hero.cta2">GitHub에서 보기</span>
+        </a>
+      </div>
+      <div class="specs rv" style="--d:.32s">
+        <div><b>60+</b> <span data-i18n="spec1">가구 오브젝트</span></div>
+        <div><b>1:60</b> <span data-i18n="spec2">/ 1:100 축척</span></div>
+        <div><b>mm</b> <span data-i18n="spec3">단위 측정</span></div>
+        <div><b>PNG·JSON</b> <span data-i18n="spec4">내보내기</span></div>
+      </div>
+    </div>
+
+    <div class="stage rv" style="--d:.2s">
+      <div class="plan-card" id="tilt">
+        <div class="card-bar"><i></i><i></i><i></i><span style="margin-left:6px">plan-01.plancraft</span><em class="tag">2D / 3D</em></div>
+        <svg class="plan-svg" viewBox="0 0 520 380" role="img" aria-label="floor plan illustration">
+          <defs>
+            <pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M20 0H0v20" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="1"/>
+            </pattern>
+            <marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0 0 10 5 0 10z" fill="#56c8d8"/>
+            </marker>
+          </defs>
+          <rect width="520" height="380" fill="url(#g)"/>
+
+          <!-- dimension line -->
+          <g class="fadein" style="animation-delay:1.5s">
+            <line x1="60" y1="38" x2="460" y2="38" stroke="#56c8d8" stroke-width="1" marker-start="url(#ar)" marker-end="url(#ar)"/>
+            <text x="260" y="30" fill="#56c8d8" font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="middle">6,400</text>
+          </g>
+
+          <!-- outer walls -->
+          <path class="draw" pathLength="1" d="M60 60h400v280H60z" fill="none" stroke="#e9e7e2" stroke-width="7" stroke-linejoin="miter" style="animation-delay:.15s"/>
+          <!-- interior walls -->
+          <path class="draw" pathLength="1" d="M250 60v120M250 215v125M60 200h80M185 200h65M310 200h150" fill="none" stroke="#e9e7e2" stroke-width="5" style="animation-delay:.75s"/>
+
+          <!-- windows -->
+          <g class="fadein" style="animation-delay:1.35s" stroke="#56c8d8" stroke-width="3">
+            <line x1="120" y1="60" x2="190" y2="60"/><line x1="120" y1="66" x2="190" y2="66"/>
+            <line x1="460" y1="240" x2="460" y2="300"/><line x1="454" y1="240" x2="454" y2="300"/>
+          </g>
+
+          <!-- room labels -->
+          <g font-family="IBM Plex Mono,monospace" font-size="11" fill="rgba(233,231,226,.55)" letter-spacing="1">
+            <text class="fadein" style="animation-delay:1.45s" x="88" y="88">ROOM 01 · 12.4㎡</text>
+            <text class="fadein" style="animation-delay:1.55s" x="278" y="88">ROOM 02 · 9.8㎡</text>
+            <text class="fadein" style="animation-delay:1.65s" x="88" y="228">LIVING · 21.6㎡</text>
+            <text class="fadein" style="animation-delay:1.75s" x="338" y="228">KITCHEN</text>
+          </g>
+
+          <!-- furniture -->
+          <g class="fadein" style="animation-delay:1.6s">
+            <rect x="86" y="106" width="94" height="66" rx="4" fill="rgba(86,200,216,.16)" stroke="#56c8d8" stroke-width="1.5"/>
+            <rect x="94" y="112" width="38" height="16" rx="3" fill="rgba(86,200,216,.3)"/>
+            <rect x="286" y="104" width="76" height="64" rx="4" fill="rgba(86,200,216,.12)" stroke="rgba(86,200,216,.6)" stroke-width="1.5"/>
+            <rect x="104" y="256" width="128" height="42" rx="6" fill="rgba(86,200,216,.14)" stroke="#56c8d8" stroke-width="1.5"/>
+            <rect x="252" y="266" width="60" height="30" rx="15" fill="none" stroke="rgba(86,200,216,.55)" stroke-width="1.5"/>
+            <circle cx="392" cy="278" r="30" fill="none" stroke="rgba(86,200,216,.55)" stroke-width="1.5"/>
+          </g>
+
+          <!-- selection box -->
+          <g class="selpulse">
+            <rect x="98" y="250" width="140" height="54" fill="none" stroke="#ff6a33" stroke-width="1.5" stroke-dasharray="6 5"/>
+            <g fill="#ff6a33">
+              <rect x="94" y="246" width="8" height="8"/><rect x="234" y="246" width="8" height="8"/>
+              <rect x="94" y="300" width="8" height="8"/><rect x="234" y="300" width="8" height="8"/>
+            </g>
+          </g>
+
+          <!-- cursor -->
+          <g class="fadein" style="animation-delay:1.9s" transform="translate(300,318)">
+            <path d="M0 0 0 20 5 15 9 23 13 21 9 13 16 13z" fill="#ff6a33" stroke="#0a0b0d" stroke-width="1.2"/>
+          </g>
+
+          <!-- measuring tape -->
+          <g class="fadein" style="animation-delay:2.05s">
+            <line x1="252" y1="330" x2="440" y2="330" stroke="#ff6a33" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text x="346" y="352" fill="#ff6a33" font-family="IBM Plex Mono,monospace" font-size="11" text-anchor="middle">3,120 mm</text>
+          </g>
+        </svg>
+      </div>
+      <div class="chip c1">T → 3D VIEW</div>
+      <div class="chip c2">SCALE 1:60 · mm</div>
+    </div>
+  </section>
+
+  <div class="ticker">
+    <div class="tick-track" id="tick"></div>
+  </div>
+
+  <section id="features" class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow rv" data-i18n="feat.eye">FEATURES</div>
+      <h2 class="rv" style="--d:.08s" data-i18n="feat.h2">도면 작업에 필요한 것만,<br>딱 필요한 만큼</h2>
+      <p class="lead rv" style="--d:.16s" data-i18n="feat.sub">2D 편집부터 3D 확인, 자재 견적까지 한 화면에서 끝납니다. 모든 처리는 당신의 브라우저 안에서 실행됩니다.</p>
+    </div>
+    <div class="bento">
+      <article class="card wide rv">
+        <span class="num">01</span>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="3.5" width="19" height="17" rx="2"/><path d="M2.5 12h7v8.5M9.5 12V3.5M14 12h7.5M14 3.5v5h8"/></svg></div>
+        <h3 data-i18n="f1.t">2D 평면 편집</h3>
+        <p data-i18n="f1.d">60여 가지 가구·가전을 라이브러리에서 끌어다 놓습니다. 이동할 때 벽에 자동으로 붙고, 회전·크기 조절, 정확한 mm 치수까지 지원합니다.</p>
+      </article>
+      <article class="card wide rv" style="--d:.08s">
+        <span class="num">02</span>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5 21 7.5v9L12 21.5 3 16.5v-9z"/><path d="M3 7.5l9 5 9-5M12 12.5v9"/></svg></div>
+        <h3 data-i18n="f2.t">3D 뷰 &amp; 1인칭 모드</h3>
+        <p data-i18n="f2.d">오버헤드·사선·상단 카메라 전환, 방 이름을 클릭하면 해당 공간으로 이동. WASD로 직접 걸어 다니고 문도 열어볼 수 있습니다.</p>
+      </article>
+      <article class="card rv">
+        <span class="num">03</span>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M20.5 12.5 12 21l-8.5-8.5V3.5H12z"/><circle cx="7.5" cy="8.5" r="1.6"/></svg></div>
+        <h3 data-i18n="f3.t">자재 비용 산정</h3>
+        <p data-i18n="f3.d">방별로 나무·타일·대리석 등 바닥재를 교체하고, 면적 × 5% 손실률로 자동 견적.</p>
+      </article>
+      <article class="card rv" style="--d:.08s">
+        <span class="num">04</span>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 16.5 16.5 3l4.5 4.5L7.5 21z"/><path d="M7 7l2 2M10 10l2 2M13 13l2 2"/></svg></div>
+        <h3 data-i18n="f4.t">측정 &amp; 벽 철거</h3>
+        <p data-i18n="f4.d">측정선이 벽에 자동 스냅되고 Shift로 수평·수직 고정. 비내력벽은 철거, 내력벽은 별도 표시.</p>
+      </article>
+      <article class="card rv" style="--d:.16s">
+        <span class="num">05</span>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v3h16v-3"/></svg></div>
+        <h3 data-i18n="f5.t">PNG · JSON 내보내기</h3>
+        <p data-i18n="f5.d">도면을 이미지로 저장하고, 시안 파일은 JSON으로 내보내거나 다시 불러옵니다.</p>
+      </article>
+      <article class="card full rv">
+        <div class="ic" style="background:var(--cyan-soft);border-color:rgba(86,200,216,.3);color:var(--cyan)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.6 2.8 3.9 5.9 3.9 9.2s-1.3 6.4-3.9 9.2c-2.6-2.8-3.9-5.9-3.9-9.2S9.4 5.6 12 2.8z"/></svg>
+        </div>
+        <div>
+          <h3 data-i18n="f6.t">3개 언어 지원</h3>
+          <p data-i18n="f6.d">한국어 · English · 日本語 — 브라우저 언어를 자동으로 감지해 첫 진입부터 알맞게 표시합니다.</p>
+        </div>
+        <div class="langs"><b>한</b><b>A</b><b>あ</b></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="how" class="paper">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow rv">HOW IT WORKS</div>
+        <h2 class="rv" style="--d:.08s" data-i18n="how.h2">세 단계면 충분합니다</h2>
+        <p class="lead rv" style="--d:.16s" data-i18n="how.sub">설치 파일도, 회원가입도 없습니다. 주소창을 열고 바로 시작하세요.</p>
+      </div>
+      <div class="steps">
+        <div class="step rv">
+          <div class="n">01</div>
+          <h3 data-i18n="s1.t">가구를 배치합니다</h3>
+          <p data-i18n="s1.d">왼쪽 라이브러리에서 침대·소파·주방 기기 등 60여 가지를 평면 위로 끌어다 놓으면 벽에 자동으로 붙습니다.</p>
+        </div>
+        <div class="step rv" style="--d:.1s">
+          <div class="n">02</div>
+          <h3 data-i18n="s2.t">벽과 치수를 조정합니다</h3>
+          <p data-i18n="s2.d">비내력벽은 철거하고 다시 세웁니다. 측정 도구로 실측 값을 확인하고, 원하면 축척을 1:60 / 1:100로 바꿉니다.</p>
+        </div>
+        <div class="step rv" style="--d:.2s">
+          <div class="n">03</div>
+          <h3 data-i18n="s3.t">3D로 전환합니다</h3>
+          <p data-i18n="s3.d">T 키 한 번이면 오버헤드 뷰와 1인칭 모드로 전환됩니다.日照 슬라이더로 시간대를 바꾸고, 방별 바닥재 견적을 확인하세요.</p>
+        </div>
+      </div>
+      <div class="titleblock rv">
+        <div><span>Project</span><b>PlanCraft</b></div>
+        <div><span>Scale</span><b>1 : 60</b></div>
+        <div><span>Unit</span><b>mm</b></div>
+        <div><span>Sheet</span><b>01 / 01</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="keys" class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow rv" data-i18n="keys.eye">SHORTCUTS</div>
+      <h2 class="rv" style="--d:.08s" data-i18n="keys.h2">손이 키보드를 떠나지 않도록</h2>
+    </div>
+    <div class="keys" id="keylist"></div>
+  </section>
+
+  <section id="faq" class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow rv">FAQ</div>
+      <h2 class="rv" style="--d:.08s" data-i18n="faq.h2">자주 묻는 질문</h2>
+    </div>
+    <div class="faq" id="faqlist"></div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2 class="rv" data-i18n="band.h2">지금 바로 평면을 그려보세요</h2>
+      <p class="lead rv" style="--d:.08s" data-i18n="band.sub">무료, 가입 없음, 브라우저에서 실행됩니다.</p>
+      <a class="btn btn-p rv" style="--d:.16s" href="./app/" data-i18n="band.cta">PlanCraft 열기</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="f-grid">
+      <div>
+        <a class="logo" href="./">
+          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="29" height="29" rx="6.5" stroke="rgba(255,255,255,.2)"/>
+            <path d="M7 25V7h11a5 5 0 0 1 0 10h-5" stroke="#ff6a33" stroke-width="2.6" stroke-linecap="square"/>
+            <path d="M19 17v8h6" stroke="#56c8d8" stroke-width="2.6" stroke-linecap="square"/>
+          </svg>
+          PlanCraft
+        </a>
+        <p data-i18n="foot.about">브라우저에서 실행되는 2D·3D 인테리어 도면 도구. 도면 데이터는 서버로 전송되지 않으며 내 기기에만 저장됩니다.</p>
+      </div>
+      <div>
+        <h4 data-i18n="foot.s1">제품</h4>
+        <ul>
+          <li><a href="./app/" data-i18n="foot.l1">도구 열기</a></li>
+          <li><a href="#features" data-i18n="nav.feat">기능</a></li>
+          <li><a href="#keys" data-i18n="nav.keys">단축키</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 data-i18n="foot.s2">릴리스</h4>
+        <ul>
+          <li><a href="https://github.com/wy51ai/floorplan-3d" target="_blank" rel="noopener" data-i18n="foot.l2">원본 저장소</a></li>
+          <li><a href="https://github.com/wy51ai/floorplan-3d/blob/master/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
+          <li><a href="https://threejs.org/" target="_blank" rel="noopener">Three.js r160</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="f-bot">
+      <span>© 2026 PLAN CRAFT</span>
+      <span data-i18n="foot.note">BASED ON WY51AI/FLOORPLAN-3D · MIT</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+const DICT = {
+  ko:{
+    "nav.feat":"기능","nav.how":"사용법","nav.keys":"단축키","nav.faq":"FAQ","nav.cta":"무료로 시작",
+    "hero.eye":"브라우저에서 바로 쓰는 2D·3D 도면 도구",
+    "hero.h1":"도면을 그리고,<br>바로 <em>3D</em>로 확인하세요",
+    "hero.sub":"가입도, 설치도 필요 없습니다. 가구를 끌어놓고 벽을 고치고, 한 번의 키 입력으로 3D 공간으로 전환하세요.",
+    "hero.cta1":"무료로 시작하기","hero.cta2":"GitHub에서 보기",
+    "spec1":"가구 오브젝트","spec2":"/ 1:100 축척","spec3":"단위 측정","spec4":"내보내기",
+    "feat.eye":"FEATURES","feat.h2":"도면 작업에 필요한 것만,<br>딱 필요한 만큼",
+    "feat.sub":"2D 편집부터 3D 확인, 자재 견적까지 한 화면에서 끝납니다. 모든 처리는 당신의 브라우저 안에서 실행됩니다.",
+    "f1.t":"2D 평면 편집","f1.d":"60여 가지 가구·가전을 라이브러리에서 끌어다 놓습니다. 이동할 때 벽에 자동으로 붙고, 회전·크기 조절, 정확한 mm 치수까지 지원합니다.",
+    "f2.t":"3D 뷰 &amp; 1인칭 모드","f2.d":"오버헤드·사선·상단 카메라 전환, 방 이름을 클릭하면 해당 공간으로 이동. WASD로 직접 걸어 다니고 문도 열어볼 수 있습니다.",
+    "f3.t":"자재 비용 산정","f3.d":"방별로 나무·타일·대리석 등 바닥재를 교체하고, 면적 × 5% 손실률로 자동 견적.",
+    "f4.t":"측정 &amp; 벽 철거","f4.d":"측정선이 벽에 자동 스냅되고 Shift로 수평·수직 고정. 비내력벽은 철거, 내력벽은 별도 표시.",
+    "f5.t":"PNG · JSON 내보내기","f5.d":"도면을 이미지로 저장하고, 시안 파일은 JSON으로 내보내거나 다시 불러옵니다.",
+    "f6.t":"3개 언어 지원","f6.d":"한국어 · English · 日本語 — 브라우저 언어를 자동으로 감지해 첫 진입부터 알맞게 표시합니다.",
+    "how.h2":"세 단계면 충분합니다","how.sub":"설치 파일도, 회원가입도 없습니다. 주소창을 열고 바로 시작하세요.",
+    "s1.t":"가구를 배치합니다","s1.d":"왼쪽 라이브러리에서 침대·소파·주방 기기 등 60여 가지를 평면 위로 끌어다 놓으면 벽에 자동으로 붙습니다.",
+    "s2.t":"벽과 치수를 조정합니다","s2.d":"비내력벽은 철거하고 다시 세웁니다. 측정 도구로 실측 값을 확인하고, 원하면 축척을 1:60 / 1:100로 바꿉니다.",
+    "s3.t":"3D로 전환합니다","s3.d":"T 키 한 번이면 오버헤드 뷰와 1인칭 모드로 전환됩니다. 시간대 슬라이더로 조명을 바꾸고, 방별 바닥재 견적을 확인하세요.",
+    "keys.eye":"SHORTCUTS","keys.h2":"손이 키보드를 떠나지 않도록",
+    "faq.h2":"자주 묻는 질문",
+    "band.h2":"지금 바로 평면을 그려보세요","band.sub":"무료, 가입 없음, 브라우저에서 실행됩니다.","band.cta":"PlanCraft 열기",
+    "foot.about":"브라우저에서 실행되는 2D·3D 인테리어 도면 도구. 도면 데이터는 서버로 전송되지 않으며 내 기기에만 저장됩니다.",
+    "foot.s1":"제품","foot.s2":"릴리스","foot.l1":"도구 열기","foot.l2":"원본 저장소",
+    "foot.note":"BASED ON WY51AI/FLOORPLAN-3D · MIT",
+    "title":"PlanCraft — 2D·3D 인테리어 도면 도구",
+    "desc":"가입 없이 브라우저에서 바로 쓰는 2D·3D 인테리어 도면 도구. 가구 배치, 벽 철거, 치수 측정, 3D 뷰와 1인칭 모드, 자재 비용 산정까지.",
+    "keys":[["T","2D / 3D 화면 전환"],["V / M / X","선택 · 측정 · 벽 철거"],["R / Shift+R","가구 90° 회전 (자유 각도는 Shift 드래그)"],["Delete","선택 삭제"],["Ctrl+D","선택 복제"],["Ctrl+Z","실행 취소 / 다시 실행"],["F","화면에 맞춤"],["[ / ]","좌우 패널 접기·펼치기"],["Shift+F","전체 화면"],["WASD","1인칭 모드 이동 (Shift: 달리기, E: 문)"]],
+    "faq":[
+      ["무료인가요?","네, 완전 무료입니다. 회원가입도, 결제도 없습니다. 모든 기능을 제한 없이 사용할 수 있습니다."],
+      ["내 데이터는 어디에 저장되나요?","브라우저의 로컬 저장소에만 저장됩니다. 서버로 전송되지 않으며, JSON 파일로 내보내면 원하는 곳에 보관하거나 다른 기기에서 불러올 수 있습니다."],
+      ["모바일에서도 되나요?","됩니다. 터치 드래그로 가구를 옮길 수 있고, 3D 모드에서는 가상 조이스틱으로 이동합니다. 다만 1인칭 조작은 키보드·마우스가 더 편합니다."],
+      ["3D 화면이 뜨지 않아요","3D 엔진은 CDN에서 불러오므로 처음 열 때 인터넷 연결이 필요합니다. 잠시 후 다시 시도하거나 페이지를 새로고침해 보세요."],
+      ["상업적으로 쓸 수 있나요","MIT 라이선스 기반 프로젝트입니다. 원본 저장소의 크레딧을 유지하는 한 자유롭게 사용할 수 있습니다."]
+    ]
+  },
+  en:{
+    "nav.feat":"Features","nav.how":"How it works","nav.keys":"Shortcuts","nav.faq":"FAQ","nav.cta":"Start free",
+    "hero.eye":"2D & 3D floor planning in your browser",
+    "hero.h1":"Draw the plan.<br>Step into <em>3D</em>.",
+    "hero.sub":"No signup, no install. Drag in furniture, adjust walls, and switch to a full 3D scene with a single keypress.",
+    "hero.cta1":"Start designing — free","hero.cta2":"View on GitHub",
+    "spec1":"furniture objects","spec2":"/ 1:100 scale","spec3":"units","spec4":"export",
+    "feat.eye":"FEATURES","feat.h2":"Everything a floor plan needs,<br>nothing it doesn't",
+    "feat.sub":"From 2D editing to 3D review and material estimates — all in one screen. Everything runs inside your browser.",
+    "f1.t":"2D plan editing","f1.d":"Drag 60+ furniture and appliance pieces from the library. Objects snap to walls, rotate, resize, and report exact mm dimensions.",
+    "f2.t":"3D views &amp; walk mode","f2.d":"Switch between overhead, angled and top-down cameras, or click a room to fly there. Walk around with WASD and open doors.",
+    "f3.t":"Material cost estimate","f3.d":"Swap flooring per room — wood, tile, marble and more — and get an automatic quote with a 5% waste allowance.",
+    "f4.t":"Measure &amp; remodel walls","f4.d":"Measure lines snap to walls and lock horizontal/vertical with Shift. Demolish partition walls; load-bearing ones stay marked.",
+    "f5.t":"Export PNG / JSON","f5.d":"Save the plan as an image, or export and re-import the whole scheme as a JSON file.",
+    "f6.t":"Three languages","f6.d":"한국어 · English · 日本語 — your browser language is detected automatically on first visit.",
+    "how.h2":"Three steps is all it takes","how.sub":"No installer, no account. Open a tab and start drawing.",
+    "s1.t":"Place furniture","s1.d":"Drag beds, sofas and kitchen units from the left library onto the plan — they snap against the walls for you.",
+    "s2.t":"Adjust walls &amp; dimensions","s2.d":"Demolish and rebuild partition walls, verify real measurements with the measuring tool, and switch scale between 1:60 and 1:100.",
+    "s3.t":"Switch to 3D","s3.d":"One press of T jumps to the overhead view and walk mode. Move the daylight slider and check the per-room flooring estimate.",
+    "keys.eye":"SHORTCUTS","keys.h2":"Keep your hands on the keyboard",
+    "faq.h2":"Frequently asked questions",
+    "band.h2":"Start drawing your plan","band.sub":"Free, no signup, runs entirely in your browser.","band.cta":"Open PlanCraft",
+    "foot.about":"A 2D & 3D interior floor planning tool that runs in your browser. Plans never leave your device — they are stored locally.",
+    "foot.s1":"Product","foot.s2":"Release","foot.l1":"Open the tool","foot.l2":"Original repository",
+    "foot.note":"BASED ON WY51AI/FLOORPLAN-3D · MIT",
+    "title":"PlanCraft — 2D & 3D floor plan designer",
+    "desc":"A free 2D & 3D interior floor planning tool that runs in your browser. Place furniture, remodel walls, measure, walk through in 3D and estimate material costs.",
+    "keys":[["T","Toggle 2D / 3D view"],["V / M / X","Select · measure · demolish wall"],["R / Shift+R","Rotate furniture 90° (Shift-drag for free angle)"],["Delete","Delete selection"],["Ctrl+D","Duplicate selection"],["Ctrl+Z","Undo / redo"],["F","Fit to window"],["[ / ]","Collapse side panels"],["Shift+F","Fullscreen"],["WASD","Walk mode movement (Shift: run, E: door)"]],
+    "faq":[
+      ["Is it really free?","Yes, completely free. No signup, no payment — every feature is available without limits."],
+      ["Where is my data stored?","Only in your browser's local storage. Nothing is sent to a server. Export to a JSON file to archive it or move it to another device."],
+      ["Does it work on mobile?","Yes. Touch drag works for furniture, and 3D mode has a virtual joystick. Keyboard and mouse are more comfortable for first-person walking, though."],
+      ["The 3D view won't load","The 3D engine is loaded from a CDN, so the first open needs an internet connection. Wait a moment and reload the page if it still fails."],
+      ["Can I use it commercially?","It is built on an MIT-licensed project. You are free to use it as long as you keep the original repository credited."]
+    ]
+  },
+  ja:{
+    "nav.feat":"機能","nav.how":"使い方","nav.keys":"ショートカット","nav.faq":"FAQ","nav.cta":"無料で始める",
+    "hero.eye":"ブラウザで使える 2D・3D 間取りツール",
+    "hero.h1":"間取りを描いたら、<br>そのまま <em>3D</em> へ。",
+    "hero.sub":"登録もインストールも不要。家具をドラッグして壁を調整、キー一発で 3D 空間に切り替えます。",
+    "hero.cta1":"無料で始める","hero.cta2":"GitHub で見る",
+    "spec1":"種類の家具","spec2":"/ 1:100 スケール","spec3":"単位で計測","spec4":"エクスポート",
+    "feat.eye":"FEATURES","feat.h2":"間取りづくりに必要な機能を、<br>必要なだけ",
+    "feat.sub":"2D 編集から 3D 確認、資材見積まで一つの画面で完結。すべてブラウザ内で処理されます。",
+    "f1.t":"2D 間取り編集","f1.d":"60 種類以上の家具・家電をライブラリからドラッグ。壁に自動スナップし、回転・サイズ変更・正確な mm 寸法に対応します。",
+    "f2.t":"3D 表示と一人称モード","f2.d":"俯瞰・斜視・真上からのカメラを切り替え、部屋名をクリックでその空間へ。WASD で歩いて、ドアも開けられます。",
+    "f3.t":"資材コスト試算","f3.d":"部屋ごとに木目・タイル・大理石などの床材を切り替え、面積 × 5% のロス分まで含めて自動見積。",
+    "f4.t":"計測と壁の解体","f4.d":"計測線は壁に自動スナップ、Shift で水平・垂直を固定。間仕切り壁は解体でき、耐力壁はそのまま表示されます。",
+    "f5.t":"PNG · JSON 書き出し","f5.d":"間取りを画像として保存し、方案は JSON ファイルとして書き出し・読み込みできます。",
+    "f6.t":"3 言語対応","f6.d":"한국어 · English · 日本語 — 初回訪問時にブラウザの言語を自動判定して表示します。",
+    "how.h2":"3 ステップで完成","how.sub":"インストールも会員登録も不要。タブを開いてすぐ描けます。",
+    "s1.t":"家具を置く","s1.d":"左のライブラリからベッド・ソファ・キッチン設備などをドラッグすると、壁に沿って自動で配置されます。",
+    "s2.t":"壁と寸法を調整","s2.d":"間仕切り壁を解体して組み直し、計測ツールで実寸を確認。スケールは 1:60 と 1:100 で切り替えられます。",
+    "s3.t":"3D に切り替える","s3.d":"T キー一発で俯瞰と一人称モードへ。時間帯スライダーで照明を変えて、部屋ごとの床材見積を確認しましょう。",
+    "keys.eye":"SHORTCUTS","keys.h2":"手をキーボードから離さないために",
+    "faq.h2":"よくある質問",
+    "band.h2":"いますぐ間取りを描こう","band.sub":"無料・登録不要、ブラウザ内で動作します。","band.cta":"PlanCraft を開く",
+    "foot.about":"ブラウザで動く 2D・3D 間取りデザインツール。間取りデータがサーバーに送信されることはなく、端末内にのみ保存されます。",
+    "foot.s1":"製品","foot.s2":"リリース","foot.l1":"ツールを開く","foot.l2":"元のリポジトリ",
+    "foot.note":"BASED ON WY51AI/FLOORPLAN-3D · MIT",
+    "title":"PlanCraft — 2D・3D 間取りデザインツール",
+    "desc":"登録不要でブラウザから使える 2D・3D 間取りデザインツール。家具配置、壁の解体、寸法計測、3D 表示と一人称モード、資材コスト試算まで。",
+    "keys":[["T","2D / 3D 画面の切り替え"],["V / M / X","選択 · 計測 · 壁の解体"],["R / Shift+R","家具を 90° 回転（Shift で自由角度）"],["Delete","選択を削除"],["Ctrl+D","選択を複製"],["Ctrl+Z","元に戻す / やり直す"],["F","画面に合わせる"],["[ / ]","サイドパネルの開閉"],["Shift+F","全画面表示"],["WASD","一人称モードの移動（Shift: 走る, E: ドア）"]],
+    "faq":[
+      ["本当に無料ですか？","はい、完全無料です。会員登録も決済も必要なく、すべての機能を制限なく使えます。"],
+      ["データはどこに保存されますか？","ブラウザのローカルストレージのみに保存され、サーバーへ送信されることはありません。JSON で書き出せばファイルとして保管・持ち運びもできます。"],
+      ["スマートフォンでも使えますか？","使えます。タッチドラッグで家具を移動でき、3D は仮想ジョイスティックで操作できます。ただし一人称の移動はキーボード・マウスの方が快適です。"],
+      ["3D が表示されません","3D エンジンは CDN から読み込むため、初回表示にはインターネット接続が必要です。少し待ってからページを再読み込みしてください。"],
+      ["商用利用できますか？","MIT ライセンスのプロジェクトが基盤です。元リポジトリへのクレジットを維持する限り自由に利用できます。"]
+    ]
+  }
+};
+
+const KEYNAME = {ko:"단축키",en:"Keyboard shortcuts",ja:"ショートカット"};
+const TICKER = {
+  ko:["60+ 가구 오브젝트","1:60 / 1:100 축척","mm 단위 측정","3D 오버헤드 뷰","1인칭 모드","벽 철거 도구","바닥재 비용 산정","PNG · JSON 내보내기","3개 언어","브라우저에서 실행"],
+  en:["60+ furniture objects","1:60 / 1:100 scale","mm measurements","3D overhead view","Walk mode","Wall demolition","Flooring cost estimate","PNG · JSON export","Three languages","Runs in your browser"],
+  ja:["60 種類の家具","1:60 / 1:100 スケール","mm 単位の計測","3D 俯瞰表示","一人称モード","壁の解体ツール","床材コスト試算","PNG · JSON 書き出し","3 言語対応","ブラウザ内で動作"]
+};
+
+let LANG = "ko";
+
+function detect(){
+  const saved = localStorage.getItem("plancraft-lang");
+  if(saved && DICT[saved]) return saved;
+  const n = (navigator.languages && navigator.languages[0]) || navigator.language || "ko";
+  const l = n.toLowerCase();
+  if(l.startsWith("ja")) return "ja";
+  if(l.startsWith("ko")) return "ko";
+  if(l.startsWith("zh")) return "en";
+  return "en";
+}
+
+function apply(lang){
+  LANG = lang;
+  const d = DICT[lang];
+  document.documentElement.lang = lang;
+  document.title = d.title;
+  const md = document.querySelector('meta[name="description"]');
+  if(md) md.setAttribute("content", d.desc);
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const v = d[el.dataset.i18n];
+    if(typeof v === "string") el.innerHTML = v;
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach(el=>{
+    const v = d[el.dataset.i18nHtml];
+    if(typeof v === "string") el.innerHTML = v;
+  });
+  document.querySelectorAll("#langsel button").forEach(b=>b.classList.toggle("on", b.dataset.lang===lang));
+  renderKeys(); renderFaq(); renderTicker();
+  try{ localStorage.setItem("plancraft-lang", lang); }catch(e){}
+}
+
+function renderKeys(){
+  const box = document.getElementById("keylist");
+  box.innerHTML = DICT[LANG].keys.map((k,i)=>
+    `<div class="krow rv" style="--d:${(i%2)*.05}s"><kbd title="${KEYNAME[LANG]}">${k[0]}</kbd><span>${k[1]}</span></div>`).join("");
+  box.querySelectorAll(".krow").forEach(el=>io.observe(el));
+}
+function renderFaq(){
+  const box = document.getElementById("faqlist");
+  box.innerHTML = DICT[LANG].faq.map((f,i)=>
+    `<details class="rv" style="--d:${i*.05}s"${i===0?" open":""}><summary>${f[0]}</summary><p>${f[1]}</p></details>`).join("");
+  box.querySelectorAll("details").forEach(el=>io.observe(el));
+}
+function renderTicker(){
+  const items = TICKER[LANG];
+  const html = items.map(t=>`<span>${t}</span>`).join("");
+  document.getElementById("tick").innerHTML = html + html;
+}
+
+const io = new IntersectionObserver(es=>{
+  es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); } });
+},{threshold:.12, rootMargin:"0px 0px -8% 0px"});
+
+document.querySelectorAll(".rv").forEach(el=>io.observe(el));
+
+document.getElementById("langsel").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-lang]");
+  if(b) apply(b.dataset.lang);
+});
+
+const nav = document.getElementById("nav");
+addEventListener("scroll", ()=>nav.classList.toggle("scrolled", scrollY>18), {passive:true});
+
+const tilt = document.getElementById("tilt");
+if(tilt && matchMedia("(hover:hover)").matches){
+  tilt.addEventListener("mousemove", e=>{
+    const r = tilt.getBoundingClientRect();
+    const x = (e.clientX-r.left)/r.width, y = (e.clientY-r.top)/r.height;
+    tilt.style.setProperty("--mx", (x*100)+"%");
+    tilt.style.setProperty("--my", (y*100)+"%");
+    tilt.style.transform = `rotateY(${(x-.5)*7}deg) rotateX(${(.5-y)*7}deg)`;
+  });
+  tilt.addEventListener("mouseleave", ()=>{ tilt.style.transform = ""; });
+}
+document.querySelectorAll(".card").forEach(c=>{
+  c.addEventListener("mousemove", e=>{
+    const r = c.getBoundingClientRect();
+    c.style.setProperty("--mx", ((e.clientX-r.left)/r.width*100)+"%");
+    c.style.setProperty("--my", ((e.clientY-r.top)/r.height*100)+"%");
+  });
+});
+
+apply(detect());
+</script>
+</body>
+</html>
