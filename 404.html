@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>404 — PlanCraft</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<style>
+:root{--ink:#0a0b0d;--fg:#e9e7e2;--muted:#959ba5;--line:rgba(255,255,255,.09);--ember:#ff6a33}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;
+  background:var(--ink);color:var(--fg);
+  font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+.wrap{max-width:520px}
+.code{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:clamp(64px,18vw,140px);font-weight:500;
+  line-height:1;letter-spacing:-.04em;color:var(--ember);margin:0 0 8px}
+h1{font-size:clamp(20px,4vw,28px);margin:0 0 12px;letter-spacing:-.02em}
+p{color:var(--muted);line-height:1.7;margin:0 0 30px}
+.acts{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+a{display:inline-block;padding:13px 24px;border-radius:999px;text-decoration:none;font-weight:600;font-size:15px;
+  transition:transform .2s,background .2s}
+a.p{background:var(--ember);color:#0a0b0d}
+a.p:hover{background:#e8551f;transform:translateY(-2px)}
+a.s{border:1px solid rgba(255,255,255,.16);color:var(--fg);background:rgba(255,255,255,.04)}
+a.s:hover{background:rgba(255,255,255,.09);transform:translateY(-2px)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="code">404</p>
+  <h1 id="h">페이지를 찾을 수 없습니다</h1>
+  <p id="b">주소가 변경되었거나 삭제되었을 수 있습니다. 아래에서 다시 시작하세요.</p>
+  <div class="acts">
+    <a class="p" href="/" id="a1">홈으로</a>
+    <a class="s" href="/app/" id="a2">도구 열기</a>
+  </div>
+</main>
+<script>
+const T = {
+  ko:["페이지를 찾을 수 없습니다","주소가 변경되었거나 삭제되었을 수 있습니다. 아래에서 다시 시작하세요.","홈으로","도구 열기"],
+  en:["Page not found","The address may have changed or been removed. Start again below.","Home","Open the tool"],
+  ja:["ページが見つかりません","アドレスが変更または削除された可能性があります。下からやり直してください.","ホーム","ツールを開く"]
+};
+const l = (navigator.language||"ko").slice(0,2);
+const t = T[l] || T.en;
+document.documentElement.lang = T[l] ? l : "en";
+document.title = "404 — PlanCraft";
+["h","b","a1","a2"].forEach((id,i)=>document.getElementById(id).textContent = t[i]);
+</script>
+</body>
+</html>
