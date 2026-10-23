@@ -151,9 +151,14 @@ main.is3d .scalebar{opacity:0}
 main.is3d #view3d{opacity:1;visibility:visible;transition:opacity .45s ease}
 #view3d canvas{display:block;outline:none}
 #walkOverlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(30,28,25,.35);z-index:3;cursor:pointer}
-#walkOverlay>div{background:var(--panel);border-radius:14px;padding:22px 28px;text-align:center;max-width:360px}
+#walkOverlay>div{background:var(--panel);border-radius:14px;padding:22px 28px;text-align:center;max-width:430px}
 #walkOverlay h3{margin:0 0 6px}
-#walkOverlay p{margin:4px 0;color:var(--muted)}
+#walkOverlay p{margin:4px 0;color:var(--muted);word-break:keep-all}
+#walkStart{margin:14px 8px 0 0}
+#walkQuit{margin-top:14px;border:1px solid var(--line);background:var(--surface)}
+body.walking .app{grid-template-columns:0 minmax(0,1fr) 0;transition:none}
+body.walking main{grid-column:2!important;grid-row:2}
+body.walking aside.lib,body.walking aside.right,body.walking #fab{display:none!important}
 #cross{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;z-index:2;display:none;pointer-events:none}
 #cross:before,#cross:after{content:"";position:absolute;background:#fff;box-shadow:0 0 2px #000}
 #cross:before{left:6px;top:0;width:2px;height:14px}#cross:after{top:6px;left:0;height:2px;width:14px}
@@ -349,7 +354,9 @@ gtag('config', 'G-R44V8XVC81');
       <div id="walkOverlay"><div><h3 data-en="Walk mode">漫游模式</h3>
         <p id="wo1"></p>
         <p id="wo2"></p>
-        <p id="wo3"></p></div></div>
+        <p id="wo3"></p>
+        <button type="button" class="btn primary" id="walkStart" data-en="Start walking">开始漫游</button>
+        <button type="button" class="btn" id="walkQuit" data-en="Back to orbit">返回鸟瞰</button></div></div>
       <div id="cross"></div>
       <div id="joy"><i></i></div>
       <button class="btn primary" id="walkExit" data-en="Exit walk">退出漫游</button>
@@ -2714,6 +2721,24 @@ function shot(){ const a = document.createElement('a'); a.download = PLAN_FILE +
 function relang(){ syncWalkTexts(); if (inited) buildLabels(); }
 
 window.View3D = {enter, exit, relang, sync:() => sync(), shot, groundAt, flyToRoom:id => active && !anim && flyToRoom(id), walking:() => active && opt.mode === 'walk'};
+
+/* Thulathy walk enhancements */
+(() => {
+  const walkBtn = document.querySelector('#modes3d [data-mode="walk"]');
+  const orbitBtn = document.querySelector('#modes3d [data-mode="orbit"]');
+  const syncWalkClass = () => document.body.classList.toggle('walking', !!walkBtn?.classList.contains('on'));
+  if (walkBtn) {
+    new MutationObserver(syncWalkClass).observe(walkBtn, { attributes: true, attributeFilter: ['class'] });
+    syncWalkClass();
+  }
+  document.addEventListener('pointerlockchange', () => {
+    if (!document.pointerLockElement && walkBtn?.classList.contains('on')) orbitBtn?.click();
+  });
+  document.getElementById('walkQuit')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    orbitBtn?.click();
+  });
+})();
 </script>
 </body>
 </html>
