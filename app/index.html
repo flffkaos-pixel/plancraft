@@ -2617,6 +2617,21 @@ function bindJoystick(){
   const end = e => { if (e.pointerId !== joy.id) return; joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
+// 漫游起点从方案自带的入户门推导，换户型数据后无需再改相机位置
+function walkSpawn(){
+  const d = DOORS.find(d => d.entry) || DOORS[0];
+  if (d){
+    const [x0, y0, x1, y1] = d.rect, cx = (x0 + x1)/2, cy = (y0 + y1)/2;
+    let ox = d.o?.[0] ?? 1, oy = d.o?.[1] ?? 0; const n = Math.hypot(ox, oy) || 1; ox /= n; oy /= n;
+    return {pos:[cx - ox*500, cy - oy*500], look:[cx + ox*2300, cy + oy*2300]};   // 门前 0.5 m，朝屋内看
+  }
+  const r = ROOMS.find(r => r.at) || ROOMS[0], at = r?.at || [OX, OY];
+  const centers = ROOMS.map(r => r.at).filter(Boolean);
+  const cx = centers.length ? centers.reduce((a, p) => a + p[0], 0)/centers.length : OX;
+  const cy = centers.length ? centers.reduce((a, p) => a + p[1], 0)/centers.length : OY;
+  let dx = at[0] - cx, dy = at[1] - cy; const n = Math.hypot(dx, dy) || 1; dx /= n; dy /= n;
+  return {pos:[at[0] + dx*900, at[1] + dy*900], look:[cx, cy]};
+}
 function setMode(m){
   if (anim) return;
   opt.mode = m; syncModeBtns();
@@ -2624,7 +2639,8 @@ function setMode(m){
     window.select(null);
     if (opt.cut < H){ opt.cut = H; syncCutBtns(); sync(); }
     orbit.enabled = false; fly = null;
-    camera.position.set(wx(4200), 1.6, wz(8755)); camera.lookAt(wx(7000), 1.5, wz(8755));   // 入户门外
+    const s = walkSpawn();
+    camera.position.set(wx(s.pos[0]), 1.6, wz(s.pos[1])); camera.lookAt(wx(s.look[0]), 1.5, wz(s.look[1]));
     $('#walkOverlay').style.display = 'flex';
     syncHint3d();
   } else {
