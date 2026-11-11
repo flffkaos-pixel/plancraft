@@ -610,10 +610,10 @@ function fixState(s){
   s.rooms = Object.assign(d.rooms, s.rooms || {});
   s.demolished = s.demolished || []; s.measures = s.measures || [];
   s.customWalls = (s.customWalls || []).map(w => {
-    if (w && typeof w.ax === 'number') return w;
-    if (w && typeof w.x0 === 'number') return {ax:w.x0, ay:w.y0, bx:w.x1, by:w.y1, t:w.t || 30};
+    if (w && typeof w.ax === 'number') return {...w};
+    if (w && typeof w.x0 === 'number') return {ax:w.x0, ay:w.y0, bx:w.x1, by:w.y1, t:w.t};
     return null;
-  }).filter(Boolean);
+  }).filter(Boolean).map(w => { if (!w.t || w.t < 60) w.t = 120; return w; });
   s.blankMode = !!s.blankMode;
   return s;
 }
@@ -642,8 +642,8 @@ function save(){ try { localStorage.setItem(STORE, JSON.stringify(state)); } cat
 const snap = () => JSON.stringify(state);
 function commit(before){ undoStack.push(before); if (undoStack.length > 150) undoStack.shift(); redoStack.length = 0; save(); }
 function mutate(fn){ const b = snap(); fn(); commit(b); renderAll(); }
-function undo(){ if (!undoStack.length) return toast(tr('没有可撤销的操作', 'Nothing to undo')); redoStack.push(snap()); state = JSON.parse(undoStack.pop()); validateSel(); save(); renderAll(); }
-function redo(){ if (!redoStack.length) return; undoStack.push(snap()); state = JSON.parse(redoStack.pop()); validateSel(); save(); renderAll(); }
+function undo(){ if (!undoStack.length) return toast(tr('没有可撤销的操作', 'Nothing to undo')); redoStack.push(snap()); state = JSON.parse(undoStack.pop()); blankMode = !!state.blankMode; validateSel(); save(); renderAll(); }
+function redo(){ if (!redoStack.length) return; undoStack.push(snap()); state = JSON.parse(redoStack.pop()); blankMode = !!state.blankMode; validateSel(); save(); renderAll(); }
 function validateSel(){ if (ui.sel?.kind==='furn' && !getF(ui.sel.id)) ui.sel = null; }
 const getF = id => state.furniture.find(f => f.id === id);
 
@@ -655,6 +655,77 @@ function aabb(f){ const a = f.rot*Math.PI/180, c = Math.abs(Math.cos(a)), s = Ma
 const fmt = (n, d=2) => n.toFixed(d);
 const norm = a => ((Math.round(a) % 360) + 360) % 360;
 function snapRects(){ return WALLS.filter((w,i) => !state.demolished.includes('w'+i)).concat(WINS); }
+const WALL_T = 120;                               // 默认墙厚 mm
+function polySign(poly){ let a = 0; for (let i = 0; i < poly.length; i++){ const [x0,y0] = poly[i], [x1,y1] = poly[(i+1)%poly.length]; a += x0*y1 - x1*y0; } return a/2; }
+function polyCentroid(poly){
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < poly.length; i++){ const [x0,y0] = poly[i], [x1,y1] = poly[(i+1)%poly.length]; const f = x0*y1 - x1*y0; a += f; cx += (x0+x1)*f; cy += (y0+y1)*f; }
+  if (Math.abs(a) < 1){ const n = poly.length || 1; return [poly.reduce((s,p) => s + p[0], 0)/n, poly.reduce((s,p) => s + p[1], 0)/n]; }
+  return [cx/(3*a), cy/(3*a)];
+}
+function distToSeg(px, pz, ax, az, bx, bz){ const dx = bx-ax, dz = bz-az, l2 = dx*dx + dz*dz; let t = l2 ? ((px-ax)*dx + (pz-az)*dz)/l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(px - (ax + t*dx), pz - (az + t*dz)); }
+// 从自由绘制的墙线中提取闭合房间（平面图 face 检测），用于楼板、面积与漫游
+let _roomsSig = '', _roomsCache = [];
+function customRooms(){
+  const walls = (state.customWalls||[]).filter(w => w && Math.hypot(w.bx-w.ax, w.by-w.ay) > 20);
+  const sig = JSON.stringify(walls);
+  if (sig === _roomsSig) return _roomsCache;
+  _roomsSig = sig; _roomsCache = [];
+  if (walls.length < 3) return _roomsCache;
+  const Q = 10, list = [], ids = new Map();
+  const pid = (x, y) => { const k = Math.round(x/Q)*Q + ',' + Math.round(y/Q)*Q; let i = ids.get(k); if (i == null){ i = list.length; ids.set(k, i); list.push({x:Math.round(x/Q)*Q, y:Math.round(y/Q)*Q}); } return i; };
+  const adj = new Map(), seen = new Set(), link = (a, b) => { if (!adj.has(a)) adj.set(a, new Set()); adj.get(a).add(b); };
+  // 先把相互交叉 / T 字相接的墙拆分，保证节点真正连通
+  const segs = walls.map(w => ({ax:w.ax, ay:w.ay, bx:w.bx, by:w.by})), splits = segs.map(() => []);
+  const addT = (i, t) => { if (t > 1e-4 && t < 1-1e-4) splits[i].push(t); };
+  for (let i = 0; i < segs.length; i++){
+    const s = segs[i], dx = s.bx-s.ax, dy = s.by-s.ay, len2 = dx*dx + dy*dy;
+    if (len2 < 1) continue;
+    for (let j = 0; j < segs.length; j++){
+      if (i === j) continue;
+      const o = segs[j];
+      for (const p of [[o.ax,o.ay],[o.bx,o.by]]){
+        const t = ((p[0]-s.ax)*dx + (p[1]-s.ay)*dy)/len2;
+        if (t > 1e-4 && t < 1-1e-4 && Math.hypot(s.ax+t*dx-p[0], s.ay+t*dy-p[1]) < 15) addT(i, t);
+      }
+      const ox = o.bx-o.ax, oy = o.by-o.ay, den = dx*oy - dy*ox;
+      if (Math.abs(den) > 1e-9){
+        const t = ((o.ax-s.ax)*oy - (o.ay-s.ay)*ox)/den, u = ((o.ax-s.ax)*dy - (o.ay-s.ay)*dx)/den;
+        if (t > 1e-4 && t < 1-1e-4 && u > 1e-4 && u < 1-1e-4) addT(i, t);
+      }
+    }
+  }
+  const pieces = [];
+  segs.forEach((s, i) => { const ts = [0, 1, ...splits[i]].sort((a,b) => a-b); for (let k = 0; k < ts.length-1; k++){ const t0 = ts[k], t1 = ts[k+1]; if (t1-t0 < 1e-4) continue; pieces.push({ax:s.ax+t0*(s.bx-s.ax), ay:s.ay+t0*(s.by-s.ay), bx:s.ax+t1*(s.bx-s.ax), by:s.ay+t1*(s.by-s.ay)}); } });
+  pieces.forEach(w => { const a = pid(w.ax,w.ay), b = pid(w.bx,w.by); if (a === b) return; const k = a < b ? a+'_'+b : b+'_'+a; if (seen.has(k)) return; seen.add(k); link(a,b); link(b,a); });
+  let cut = true;
+  while (cut){ cut = false; for (const [u,set] of [...adj]){ if (set.size === 1){ const v = [...set][0]; adj.get(v)?.delete(u); adj.delete(u); cut = true; } } }
+  const sorted = new Map();
+  for (const [u,set] of adj) sorted.set(u, [...set].map(v => ({v, a:Math.atan2(list[v].y-list[u].y, list[v].x-list[u].x)})).sort((p,q) => p.a-q.a).map(o => o.v));
+  const visited = new Set(), faces = [];
+  for (const [u,set] of adj) for (const v of set){
+    if (visited.has(u+'>'+v)) continue;
+    const poly = []; let cu = u, cv = v, guard = 0;
+    while (guard++ < 5000){
+      visited.add(cu+'>'+cv); poly.push([list[cv].x, list[cv].y]);
+      const arr = sorted.get(cv); if (!arr) break;
+      const i = arr.indexOf(cu); if (i < 0) break;
+      const nv = arr[(i-1+arr.length)%arr.length];
+      cu = cv; cv = nv;
+      if (cu === u && cv === v) break;
+    }
+    if (poly.length >= 3){ const a = polySign(poly); if (Math.abs(a) > 5e5) faces.push({poly, area:a}); }
+  }
+  if (faces.length < 2) return _roomsCache;
+  const outer = faces.reduce((m,f) => Math.abs(f.area) > Math.abs(m.area) ? f : m, faces[0]);
+  _roomsCache = faces.filter(f => f !== outer && Math.sign(f.area) !== Math.sign(outer.area) && Math.abs(f.area) > 5e5)
+    .map((f, i) => {
+      const poly = f.poly.map(p => [p[0], p[1]]);
+      if (polySign(poly) < 0) poly.reverse();
+      return {id:'c'+i, name:trf('房间 {}', 'Room {}', i+1), poly, mat:'tile800', at:polyCentroid(poly), area:Math.abs(polySign(poly))/1e6, custom:true};
+    });
+  return _roomsCache;
+}
 
 /* ======================= 颜色 / 材质图案 ======================= */
 function hex2rgb(h){ h = h.replace('#',''); if (h.length===3) h = h.split('').map(c=>c+c).join(''); const n = parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
@@ -795,7 +866,7 @@ function furnSVG(t,w,d,c){
 /* ======================= 渲染 ======================= */
 const NOLABEL = ['plant','floorlamp','sidetable','barstool','beanbag'];
 function renderRooms(){
-  if(blankMode){ $('#gRooms').innerHTML=''; return; }
+  if(blankMode){ $('#gRooms').innerHTML = customRooms().map(r => `<polygon class="room" data-room="${r.id}" points="${r.poly.map(p=>p.join(',')).join(' ')}" fill="url(#m-${r.mat})" opacity=".9"/>`).join(''); return; }
   let s = '';
   ROOMS.forEach(r => { const mt = state.rooms[r.id].mat; s += `<polygon class="room" data-room="${r.id}" points="${r.poly.map(p=>p.join(',')).join(' ')}" fill="${mt==='none' ? 'none' : `url(#m-${mt})`}"/>`; });
   const sill = ([a,b,c,d]) => `<rect x="${a}" y="${b}" width="${c-a}" height="${d-b}" fill="#e2dacb" stroke="#b9b0a0" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
@@ -829,7 +900,7 @@ function renderWalls(){
     }).join('');
   }
   const custom = (state.customWalls||[]).map((w,i)=>{
-    const t = w.t || 30;
+    const t = w.t || WALL_T;
     return `<g class="cwall" data-cwall="${i}">
       <line x1="${w.ax}" y1="${w.ay}" x2="${w.bx}" y2="${w.by}" stroke="#a7a195" stroke-width="${t}" stroke-linecap="butt"/>
       <line x1="${w.ax}" y1="${w.ay}" x2="${w.bx}" y2="${w.by}" stroke="#3d3a34" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>
@@ -868,9 +939,16 @@ function renderOpenings(){
 }
 
 function renderLabels(){
-  if(blankMode){ $('#gLabels').innerHTML=''; return; }
   const g = $('#gLabels');
   g.setAttribute('display', ui.layers.labels ? 'inline' : 'none');
+  if(blankMode){
+    g.innerHTML = customRooms().filter(r => r.at).map(r => {
+      const [x,y] = r.at, halo = 'stroke="#fbf9f4" stroke-width="45" paint-order="stroke" stroke-linejoin="round"';
+      return `<text x="${x}" y="${y}" font-size="250" font-weight="600" text-anchor="middle" fill="#2b2824" ${halo}>${esc(r.name)}</text>
+        <text x="${x}" y="${y+260}" font-size="175" text-anchor="middle" fill="#7d7366" ${halo}>${fmt(r.area)} m²</text>`;
+    }).join('');
+    return;
+  }
   g.innerHTML = ROOMS.filter(r => r.at).map(r => {
     const [x,y] = r.at, halo = 'stroke="#fbf9f4" stroke-width="45" paint-order="stroke" stroke-linejoin="round"';
     return `<text x="${x}" y="${y}" font-size="250" font-weight="600" text-anchor="middle" fill="#2b2824" ${halo}>${esc(nm(state.rooms[r.id].name))}</text>
@@ -958,7 +1036,10 @@ function renderAll(){
 
 function updateHeader(){
   if (blankMode){
-    $('#subtitle').textContent = tr('빈 캔버스 · 绘墙 으로 벽부터 설계 · 단위 mm', 'Blank canvas · draw walls from scratch · units mm');
+    const rs = customRooms(), tot = rs.reduce((a,r) => a + r.area, 0);
+    $('#subtitle').textContent = rs.length
+      ? trf('빈 캔버스 · {}개房间 · {} m² · 단위 mm', 'Blank canvas · {} room(s) · {} m² · units mm', rs.length, fmt(tot))
+      : tr('빈 캔버스 · 绘墙 으로 벽부터 설계 · 단위 mm', 'Blank canvas · draw walls from scratch · units mm');
   } else {
     const tot = ROOMS.filter(r => r.counted !== false).reduce((a,r) => a + area(r.poly), 0);
     $('#subtitle').textContent = trf(`套内使用面积约 {} m² · 尺寸单位 mm · 原图比例 1:60`, `Net floor area ≈ {} m² · Units: mm · Original scale 1:60`, fmt(tot));
@@ -985,6 +1066,8 @@ function blankPanel(){
     <div class="muted">${tr('기본 골조가 없는 빈 캔버스입니다. 아래 绘墙 시작 을 누르고 화면을 클릭하면 벽이 연속으로 그려집니다. 자동으로 직각·45°·끝점에 스냅되며, 종료는 Esc·우클릭·더블클릭입니다.', 'Empty canvas with no base framework. Press Start drawing walls and click to chain walls. It snaps to orthogonal/45°/endpoints; finish with Esc, right-click or double-click.')}</div>
     <div class="stats" style="margin-top:10px">
       <div><small>${tr('그린 벽','Walls drawn')}</small><span class="big">${n}</span></div>
+      <div><small>${tr('房间','Rooms')}</small><span class="big">${customRooms().length}</span></div>
+      <div><small>${tr('면적','Floor area')}</small><span class="big">${fmt(customRooms().reduce((a,r) => a + r.area, 0), 1)} m²</span></div>
       <div><small>${tr('가구','Furniture')}</small><span class="big">${state.furniture.length}</span></div>
     </div>
     <div class="actions" style="margin-top:10px">
@@ -1393,7 +1476,7 @@ svg.addEventListener('pointerdown', e => {
       if (Math.hypot(q.x-a.x, q.y-a.y) > 50){
         const bkp = snap();
         state.customWalls = state.customWalls||[];
-        state.customWalls.push({ax:a.x, ay:a.y, bx:q.x, by:q.y, t:30});
+        state.customWalls.push({ax:a.x, ay:a.y, bx:q.x, by:q.y, t:WALL_T});
         commit(bkp);
         wallDrawPoints.push(q);
         renderAll();
@@ -1663,7 +1746,7 @@ const TIPS = () => COARSE
 async function setView(m){
   if (m === viewMode || switching) return;
   if (!window.View3D) return toast(tr('3D 引擎仍在加载或加载失败（需要联网加载 three.js）', '3D engine is still loading or failed to load (three.js needs a network connection)'));
-  if (m === '3d' && blankMode){ switching = false; document.body.classList.remove('busy'); return toast(tr('빈 캔버스 모드에서는 3D를 지원하지 않습니다. 기본 골조 없이 2D로 설계하세요', '3D is unavailable in blank canvas mode. Design in 2D without the base framework.')); }
+  if (m === '3d' && blankMode && !(state.customWalls||[]).length){ switching = false; document.body.classList.remove('busy'); return toast(tr('먼저 绘墙 도구로 벽을 그려주세요', 'Draw some walls first with the Draw Wall tool')); }
   switching = true; document.body.classList.add('busy');
   viewMode = m;
   if (m === '3d'){ if (ui.tool !== 'select') setTool('select'); ui.mA = null; document.body.classList.add('m3d'); await window.View3D.enter(); }
@@ -1720,7 +1803,7 @@ $('#importJson').onclick = () => $('#fileIn').click();
 $('#fileIn').onchange = e => {
   const file = e.target.files[0]; if (!file) return;
   file.text().then(txt => {
-    try { const s = JSON.parse(txt); if (!Array.isArray(s.furniture)) throw 0; const b = snap(); state = fixState(s); ui.sel = null; commit(b); renderAll(); toast(tr('方案已导入', 'Plan imported')); }
+    try { const s = JSON.parse(txt); if (!Array.isArray(s.furniture)) throw 0; const b = snap(); state = fixState(s); blankMode = !!state.blankMode; ui.sel = null; commit(b); renderAll(); toast(tr('方案已导入', 'Plan imported')); }
     catch(err){ toast(tr('文件格式不正确', 'Invalid file format')); }
   });
   e.target.value = '';
@@ -2565,10 +2648,39 @@ function wallBox([x0, y0, x1, y1], yb, yt, m){
 }
 const edgeMat = new THREE.LineBasicMaterial({color:0x6f675b}), skirtMat = new THREE.MeshStandardMaterial({color:'#8b7f6e', roughness:.6});
 function shapeOf(poly, flip){ const s = new THREE.Shape(); poly.forEach(([x, y], i) => s[i ? 'lineTo' : 'moveTo'](wx(x), flip ? wz(y) : -wz(y))); return s; }
+// 自由绘制的墙体 / 楼板
+function addCustomWall(w, top){
+  const ax = wx(w.ax), az = wz(w.ay), bx = wx(w.bx), bz = wz(w.by);
+  const L = Math.hypot(bx-ax, bz-az); if (L < .001) return;
+  const th = M(Math.max(w.t || WALL_T, 40));
+  const o = new THREE.Mesh(new THREE.BoxGeometry(L, top, th), [wallMat, wallMat, capMat, wallMat, wallMat, wallMat]);
+  o.position.set((ax+bx)/2, top/2, (az+bz)/2); o.rotation.y = Math.atan2(-(bz-az), bx-ax);
+  o.castShadow = o.receiveShadow = true; archUp.add(o);
+  const ln = new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry), edgeMat); ln.position.copy(o.position); ln.rotation.y = o.rotation.y; ln.userData.walkOnly = true; ln.visible = opt.mode === 'walk'; archUp.add(ln);
+  const p = o.geometry.parameters, sh = Math.min(.12, top), sk = new THREE.Mesh(new THREE.BoxGeometry(p.width + .02, sh, p.depth + .02), skirtMat);
+  sk.position.set(o.position.x, sh/2, o.position.z); sk.rotation.y = o.rotation.y; sk.userData.walkOnly = true; sk.visible = opt.mode === 'walk'; archUp.add(sk);
+}
+function addCustomFloor(r, top){
+  const m = floorMat(r.mat || 'tile800');
+  const geo = new THREE.ShapeGeometry(shapeOf(r.poly)); geo.rotateX(-Math.PI/2);
+  const fl = new THREE.Mesh(geo, m); fl.receiveShadow = true; fl.userData.room = r.id; archFloor.add(fl);
+  const cg = new THREE.ShapeGeometry(shapeOf(r.poly, true)); cg.rotateX(Math.PI/2);
+  const ceil = new THREE.Mesh(cg, mat('#fbfaf7', {roughness:1})); ceil.position.y = H; ceil.visible = top >= H; archUp.add(ceil);
+  if (r.at){
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .02, 32), new THREE.MeshStandardMaterial({color:'#fff', emissive:'#fff2d6', emissiveIntensity:.3}));
+    lamp.position.set(wx(r.at[0]), H - .012, wz(r.at[1])); lamp.visible = top >= H; lampG.add(lamp);
+    const pl = new THREE.PointLight(0xffd9a8, 0, 7, 1.6); pl.position.set(wx(r.at[0]), H - .25, wz(r.at[1])); lampG.add(pl);
+  }
+}
 
 function buildArch(){
   clearGroup(archFloor); clearGroup(archUp); lampG.clear(); doors.length = 0; colliders = [];
   const top = opt.cut;
+  if (blankMode){
+    customRooms().forEach(r => addCustomFloor(r, top));
+    (state.customWalls||[]).forEach(w => addCustomWall(w, top));
+    applyLight(); applyGrow(); return;
+  }
   ROOMS.forEach(r => {
     const m = floorMat(state.rooms[r.id].mat), bay = r.counted === false;
     const geo = bay ? new THREE.ExtrudeGeometry(shapeOf(r.poly), {depth:.45, bevelEnabled:false}) : new THREE.ShapeGeometry(shapeOf(r.poly));
@@ -2626,6 +2738,7 @@ function buildArch(){
       [-1, 1].forEach(e => { const fr = new THREE.Mesh(new THREE.BoxGeometry(.04, ph, .04), frameMat); fr.position.set(v ? x : x + e*pl/2, ph/2, v ? z + e*pl/2 : z); archUp.add(fr); });
     });
   });
+  (state.customWalls||[]).forEach(w => addCustomWall(w, top));
   applyLight(); applyGrow();
 }
 
@@ -2637,14 +2750,16 @@ function buildFurn(){
 
 function buildLabels(){
   labelG.children.slice().forEach(o => { o.element.remove(); labelG.remove(o); });
-  ROOMS.filter(r => r.at).forEach(r => {
+  const base = ROOMS.map(r => ({...r, area:area(r.poly), label:nm(state.rooms[r.id].name)}));
+  const rooms = blankMode ? customRooms().map(r => ({...r, label:r.name})) : base.filter(r => r.at);
+  rooms.filter(r => r.at).forEach(r => {
     const el = document.createElement('div'); el.className = 'rlabel';
-    el.innerHTML = `${esc(nm(state.rooms[r.id].name))}<small>${area(r.poly).toFixed(1)}m²</small>`;
+    el.innerHTML = `${esc(r.label)}<small>${(r.area || area(r.poly)).toFixed(1)}m²</small>`;
     const o = new CSS2DObject(el); o.position.set(wx(r.at[0]), opt.cut + .15, wz(r.at[1])); o.visible = labelG.visible; labelG.add(o);
   });
-  const counted = ROOMS.filter(r => r.counted !== false);
-  $('#roomList').innerHTML = counted.map(r => `<button data-room="${r.id}"><span>${esc(nm(state.rooms[r.id].name))}</span><small>${area(r.poly).toFixed(2)} m²</small></button>`).join('')
-    + `<button data-room="__all"><span>${tr('全屋', 'Whole home')}</span><small>${counted.reduce((a, r) => a + area(r.poly), 0).toFixed(2)} m²</small></button>`;
+  const counted = blankMode ? customRooms().map(r => ({...r, label:r.name})) : base.filter(r => r.counted !== false);
+  $('#roomList').innerHTML = counted.map(r => `<button data-room="${r.id}"><span>${esc(r.label)}</span><small>${(r.area || area(r.poly)).toFixed(2)} m²</small></button>`).join('')
+    + (blankMode ? '' : `<button data-room="__all"><span>${tr('全屋', 'Whole home')}</span><small>${counted.reduce((a, r) => a + r.area, 0).toFixed(2)} m²</small></button>`);
   document.querySelectorAll('#roomList button').forEach(b => b.onclick = () => {
     document.querySelectorAll('#roomList button').forEach(x => x.classList.toggle('on', x === b));
     if (opt.mode === 'walk') setMode('orbit');
@@ -2655,7 +2770,7 @@ function buildLabels(){
 // 只重建变化的部分
 function sync(force){
   if (!inited || (!active && !force)) return;
-  const a = JSON.stringify([state.rooms, state.demolished, opt.cut]), f = JSON.stringify(state.furniture), l = JSON.stringify([state.rooms, opt.cut]);
+  const a = JSON.stringify([state.rooms, state.demolished, opt.cut, blankMode, state.customWalls]), f = JSON.stringify(state.furniture), l = JSON.stringify([state.rooms, opt.cut, blankMode, state.customWalls]);
   if (force || a !== sigArch){ sigArch = a; buildArch(); }
   if (force || f !== sigFurn){ sigFurn = f; buildFurn(); }
   if (force || l !== sigLabels){ sigLabels = l; buildLabels(); }
@@ -2700,8 +2815,15 @@ function isoFrom(P){
   const d = THREE.MathUtils.clamp(P.p.y, 5, 30), dir = new THREE.Vector3(.3, .82, .49).normalize();
   return pose(P.t.clone(), P.t.clone().addScaledVector(dir, d));
 }
-const isoWhole = () => pose(new THREE.Vector3(0, 0, 0), new THREE.Vector3(5.5, 15.5, 10));
-const topWhole = () => pose(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 19, 1e-4));
+function planCenter(){
+  if (!blankMode) return {x:0, z:0, size:12};
+  const ws = state.customWalls || [];
+  if (!ws.length) return {x:0, z:0, size:12};
+  const xs = ws.flatMap(w => [w.ax, w.bx]), ys = ws.flatMap(w => [w.ay, w.by]);
+  return {x:wx((Math.min(...xs)+Math.max(...xs))/2), z:wz((Math.min(...ys)+Math.max(...ys))/2), size:Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys))/1000};
+}
+const isoWhole = () => { const c = planCenter(); if (blankMode){ const d = Math.max(14, c.size*1.6); return pose(new THREE.Vector3(c.x, 0, c.z), new THREE.Vector3(c.x + d*.32, d*1.05, c.z + d*.62)); } return pose(new THREE.Vector3(0, 0, 0), new THREE.Vector3(5.5, 15.5, 10)); };
+const topWhole = () => { const c = planCenter(); if (blankMode){ const d = Math.max(16, c.size*1.8); return pose(new THREE.Vector3(c.x, 0, c.z), new THREE.Vector3(c.x, d, c.z + 1e-4)); } return pose(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 19, 1e-4)); };
 const curPose = () => pose(orbit.target.clone(), camera.position.clone());
 // 以目标点为中心做球坐标插值：镜头沿弧线倾斜环绕，而不是直线穿越
 function camTween(A, B, e){
@@ -2716,7 +2838,9 @@ function animate(dur, fn){ return new Promise(res => { anim = {t0:performance.no
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function flyTo(B, dur = 900){ fly = {t0:performance.now(), dur, A:curPose(), B}; }
 function flyToRoom(id){
-  const r = ROOMS.find(r => r.id === id), xs = r.poly.map(p => p[0]), ys = r.poly.map(p => p[1]);
+  const r = ROOMS.find(r => r.id === id) || customRooms().find(r => r.id === id);
+  if (!r) return;
+  const xs = r.poly.map(p => p[0]), ys = r.poly.map(p => p[1]);
   const t = new THREE.Vector3(wx((Math.min(...xs)+Math.max(...xs))/2), .6, wz((Math.min(...ys)+Math.max(...ys))/2));
   const size = M(Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys)));
   const dir = camera.position.clone().sub(orbit.target).setY(0); if (dir.lengthSq() < .01) dir.set(.6, 0, .8); dir.normalize();
@@ -2846,6 +2970,17 @@ function bindJoystick(){
 }
 // 漫游起点从方案自带的入户门推导，换户型数据后无需再改相机位置
 function walkSpawn(){
+  if (blankMode){
+    const rs = customRooms().slice().sort((a, b) => b.area - a.area);
+    if (rs.length){ const [x, y] = rs[0].at; return {pos:[x, y], look:[x + 1000, y]}; }
+    const ws = state.customWalls || [];
+    if (ws.length){
+      const xs = ws.flatMap(w => [w.ax, w.bx]), ys = ws.flatMap(w => [w.ay, w.by]);
+      const cx = (Math.min(...xs) + Math.max(...xs))/2, cy = (Math.min(...ys) + Math.max(...ys))/2;
+      return {pos:[cx, cy], look:[cx + 1000, cy]};
+    }
+    return {pos:[OX, OY], look:[OX + 1000, OY]};
+  }
   const d = DOORS.find(d => d.entry) || DOORS[0];
   if (d){
     const [x0, y0, x1, y1] = d.rect, cx = (x0 + x1)/2, cy = (y0 + y1)/2;
@@ -2881,6 +3016,10 @@ function setMode(m){
 }
 function blocked(x, z, r = .22){
   for (const [x0, z0, x1, z1] of colliders) if (x > x0 - r && x < x1 + r && z > z0 - r && z < z1 + r) return true;
+  for (const w of (state.customWalls||[])){
+    const half = M(Math.max(w.t || WALL_T, 40))/2;
+    if (distToSeg(x, z, wx(w.ax), wz(w.ay), wx(w.bx), wz(w.by)) < half + r) return true;
+  }
   for (const d of doors){
     const a = d.pivot.rotation.y, px = d.pivot.position.x, pz = d.pivot.position.z, ex = px + Math.cos(a)*.9, ez = pz - Math.sin(a)*.9;
     const t = clamp01(((x-px)*(ex-px) + (z-pz)*(ez-pz)) / ((ex-px)**2 + (ez-pz)**2));
@@ -2914,10 +3053,11 @@ addEventListener('keyup', e => keys[e.code] = false);
 function syncModeBtns(){ document.querySelectorAll('#modes3d .btn').forEach(b => b.classList.toggle('on', b.dataset.mode === opt.mode)); }
 function syncCutBtns(){ document.querySelectorAll('[data-cut]').forEach(b => b.classList.toggle('on', +b.dataset.cut === opt.cut)); }
 function syncWalkTexts(){
+  const startHint = blankMode ? tr('클릭해서 직접 그린 평면 안에서 시작', 'Click to start inside your drawn plan') : tr('点击开始，从入户门进入', 'Click to start at the front door');
   const t = COARSE
-    ? [tr('点击开始，从入户门进入', 'Tap to start at the front door'), tr('左下摇杆移动 · 在画面上拖动转向', 'Joystick moves · drag on screen to look'),
+    ? [startHint, tr('左下摇杆移动 · 在画面上拖动转向', 'Joystick moves · drag on screen to look'),
        tr('点门开关 · 点「退出漫游」回到鸟瞰', 'Tap doors to open · "Exit walk" returns to orbit')]
-    : [tr('点击开始，从入户门进入', 'Click to start at the front door'),
+    : [startHint,
        tr('<kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> 移动 · 鼠标转向 · <kbd>Shift</kbd> 快走', '<kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> move · mouse looks · <kbd>Shift</kbd> runs'),
        tr('<kbd>E</kbd> 开关正前方的门 · <kbd>Esc</kbd> 暂停', '<kbd>E</kbd> opens the door ahead · <kbd>Esc</kbd> pauses')];
   t.forEach((h, i) => $('#wo' + (i + 1)).innerHTML = h);
