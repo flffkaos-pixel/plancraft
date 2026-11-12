@@ -597,7 +597,7 @@ function defaultFurniture(){ return [
 
 function defaultState(){
   const rooms = {}; ROOMS.forEach(r => rooms[r.id] = {name:r.name, mat:r.mat});
-  return {furniture:defaultFurniture(), rooms, demolished:[], measures:[], customWalls:[], blankMode:false};
+  return {furniture:defaultFurniture(), rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], blankMode:false};
 }
 
 const STORE = 'huxing-design-v2';
@@ -608,7 +608,7 @@ function load(){
 function fixState(s){
   const d = defaultState();
   s.rooms = Object.assign(d.rooms, s.rooms || {});
-  s.demolished = s.demolished || []; s.measures = s.measures || [];
+  s.demolished = s.demolished || []; s.removedWalls = s.removedWalls || []; s.measures = s.measures || [];
   s.customWalls = (s.customWalls || []).map(w => {
     if (w && typeof w.ax === 'number') return {...w};
     if (w && typeof w.x0 === 'number') return {ax:w.x0, ay:w.y0, bx:w.x1, by:w.y1, t:w.t};
@@ -649,12 +649,13 @@ const getF = id => state.furniture.find(f => f.id === id);
 
 /* ======================= 几何工具 ======================= */
 const area = poly => Math.abs(poly.reduce((a,p,i) => { const q = poly[(i+1)%poly.length]; return a + p[0]*q[1] - q[0]*p[1]; }, 0)) / 2 / 1e6;
+const roomArea = (id, poly) => { const v = state.rooms?.[id]?.area; return (typeof v === 'number' && isFinite(v)) ? v : area(poly); };
 const perim = poly => poly.reduce((a,p,i) => { const q = poly[(i+1)%poly.length]; return a + Math.hypot(q[0]-p[0], q[1]-p[1]); }, 0) / 1000;
 const bbox = poly => { const xs = poly.map(p=>p[0]), ys = poly.map(p=>p[1]); return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]; };
 function aabb(f){ const a = f.rot*Math.PI/180, c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a)); return {hw:f.w/2*c + f.d/2*s, hh:f.w/2*s + f.d/2*c}; }
 const fmt = (n, d=2) => n.toFixed(d);
 const norm = a => ((Math.round(a) % 360) + 360) % 360;
-function snapRects(){ return WALLS.filter((w,i) => !state.demolished.includes('w'+i)).concat(WINS); }
+function snapRects(){ return WALLS.filter((w,i) => !state.demolished.includes('w'+i) && !state.removedWalls.includes('w'+i)).concat(WINS); }
 const WALL_T = 120;                               // 默认墙厚 mm
 function polySign(poly){ let a = 0; for (let i = 0; i < poly.length; i++){ const [x0,y0] = poly[i], [x1,y1] = poly[(i+1)%poly.length]; a += x0*y1 - x1*y0; } return a/2; }
 function polyCentroid(poly){
@@ -668,7 +669,8 @@ function distToSeg(px, pz, ax, az, bx, bz){ const dx = bx-ax, dz = bz-az, l2 = d
 let _roomsSig = '', _roomsCache = [];
 function customRooms(){
   const walls = (state.customWalls||[]).filter(w => w && Math.hypot(w.bx-w.ax, w.by-w.ay) > 20);
-  const sig = JSON.stringify(walls);
+  const metaSig = JSON.stringify(Object.keys(state.rooms).filter(k => k[0] === 'c').sort().map(k => [k, state.rooms[k].name, state.rooms[k].area, state.rooms[k].mat]));
+  const sig = JSON.stringify(walls) + '|' + metaSig;
   if (sig === _roomsSig) return _roomsCache;
   _roomsSig = sig; _roomsCache = [];
   if (walls.length < 3) return _roomsCache;
@@ -722,7 +724,8 @@ function customRooms(){
     .map((f, i) => {
       const poly = f.poly.map(p => [p[0], p[1]]);
       if (polySign(poly) < 0) poly.reverse();
-      return {id:'c'+i, name:trf('房间 {}', 'Room {}', i+1), poly, mat:'tile800', at:polyCentroid(poly), area:Math.abs(polySign(poly))/1e6, custom:true};
+      const id = 'c'+i, meta = state.rooms[id] || {}, computed = Math.abs(polySign(poly))/1e6;
+      return {id, name:meta.name || trf('房间 {}', 'Room {}', i+1), poly, mat:meta.mat || 'tile800', at:polyCentroid(poly), area:(typeof meta.area === 'number' && isFinite(meta.area)) ? meta.area : computed, custom:true};
     });
   return _roomsCache;
 }
@@ -893,6 +896,7 @@ function renderWalls(){
   if(!blankMode){
     html = WALLS.map((w,i) => {
       const [x0,y0,x1,y1,k] = w, id = 'w'+i, dem = state.demolished.includes(id);
+      if (state.removedWalls.includes(id)) return '';
       let fill = k==='b' ? (ui.layers.bearing ? '#b8412c' : '#26241f') : k==='low' ? '#e9e3d8' : k==='e' ? '#8f897d' : '#a7a195';
       let ex = k==='low' ? 'stroke="#8f897d" stroke-width="1" vector-effect="non-scaling-stroke"' : '';
       if (dem){ fill = 'rgba(198,91,58,.12)'; ex = 'stroke="#c65b3a" stroke-width="1.2" stroke-dasharray="5 3" vector-effect="non-scaling-stroke"'; }
@@ -900,11 +904,14 @@ function renderWalls(){
     }).join('');
   }
   const custom = (state.customWalls||[]).map((w,i)=>{
-    const t = w.t || WALL_T;
+    const t = w.t || WALL_T, L = Math.round(Math.hypot(w.bx-w.ax, w.by-w.ay));
+    const mx = (w.ax+w.bx)/2, my = (w.ay+w.by)/2;
+    let ang = Math.atan2(w.by-w.ay, w.bx-w.ax)*180/Math.PI; if (ang > 90 || ang < -90) ang += 180;
+    const lenTxt = ui.layers.dims ? `<text class="clen" data-clen="${i}" x="${mx}" y="${my-70}" font-size="180" text-anchor="middle" fill="#4a443c" transform="rotate(${ang} ${mx} ${my})" stroke="#fbf9f4" stroke-width="60" paint-order="stroke" style="cursor:pointer">${L}</text>` : '';
     return `<g class="cwall" data-cwall="${i}">
       <line x1="${w.ax}" y1="${w.ay}" x2="${w.bx}" y2="${w.by}" stroke="#a7a195" stroke-width="${t}" stroke-linecap="butt"/>
       <line x1="${w.ax}" y1="${w.ay}" x2="${w.bx}" y2="${w.by}" stroke="#3d3a34" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>
-    </g>`;
+    </g>${lenTxt}`;
   }).join('');
   $('#gWalls').innerHTML = html + custom;
 }
@@ -952,7 +959,7 @@ function renderLabels(){
   g.innerHTML = ROOMS.filter(r => r.at).map(r => {
     const [x,y] = r.at, halo = 'stroke="#fbf9f4" stroke-width="45" paint-order="stroke" stroke-linejoin="round"';
     return `<text x="${x}" y="${y}" font-size="250" font-weight="600" text-anchor="middle" fill="#2b2824" ${halo}>${esc(nm(state.rooms[r.id].name))}</text>
-      <text x="${x}" y="${y+260}" font-size="175" text-anchor="middle" fill="#7d7366" ${halo}>${fmt(area(r.poly))} m²</text>`;
+      <text x="${x}" y="${y+260}" font-size="175" text-anchor="middle" fill="#7d7366" ${halo}>${fmt(roomArea(r.id, r.poly))} m²</text>`;
   }).join('');
 }
 
@@ -1074,7 +1081,13 @@ function blankPanel(){
       <button class="btn" id="blankDraw">${tr('绘墙 시작','Start drawing walls')}</button>
       <button class="btn" id="blankUpload">${tr('배경 이미지 업로드','Upload background image')}</button>
     </div>
-    <div class="muted" style="margin-top:8px">${tr('그린 벽을 지우려면 选择 도구로 벽을 클릭하세요.', 'To delete a wall, click it with the Select tool.')}</div></section>`;
+    <div class="muted" style="margin-top:8px">${tr('벽 길이 숫자를 클릭하면 길이를 다시 입력할 수 있습니다 · 벽 몸통을 选择 도구로 클릭하면 삭제됩니다.', 'Click a wall length number to type a new length · click a wall body with the Select tool to delete it.')}</div>
+    ${customRooms().length ? `<h3 style="margin-top:14px">${tr('방 이름 / 면적','Room name / area')}</h3>
+      ${customRooms().map(r => { const meta = state.rooms[r.id] || {}; return `<div class="form" style="margin-bottom:6px">
+        <label class="full">${tr('이름','Name')}<input class="rNameIn" data-rid="${r.id}" value="${esc(meta.name || r.name)}"></label>
+        <label>${tr('면적','Area')} (m²)<input class="rAreaIn" data-rid="${r.id}" type="number" step="0.01" value="${(typeof meta.area === 'number' ? meta.area : r.area).toFixed(2)}"></label>
+      </div>`; }).join('')}` : ''}
+  </section>`;
 }
 
 const kbdRows = rows => `<div class="kbd">${rows.map(([k, d]) => `<kbd>${tr(k[0], k[1])}</kbd><span>${tr(d[0], d[1])}</span>`).join('')}</div>`;
@@ -1106,11 +1119,11 @@ function overviewPanel(){
   const rows = ROOMS.map(r => {
     const st = state.rooms[r.id];
     return `<tr class="click" data-room="${r.id}"><td><span class="sw" style="background:${MATS[st.mat].sw}"></span>${esc(nm(st.name))}${r.counted===false?' <span class="muted">*</span>':''}</td>
-      <td class="r">${fmt(area(r.poly))} m²</td></tr>`;
+      <td class="r">${fmt(roomArea(r.id, r.poly))} m²</td></tr>`;
   }).join('');
-  const tot = ROOMS.filter(r => r.counted !== false).reduce((a,r) => a + area(r.poly), 0);
+  const tot = ROOMS.filter(r => r.counted !== false).reduce((a,r) => a + roomArea(r.id, r.poly), 0);
   const byMat = {};
-  ROOMS.forEach(r => { const m = state.rooms[r.id].mat; byMat[m] = (byMat[m]||0) + area(r.poly); });
+  ROOMS.forEach(r => { const m = state.rooms[r.id].mat; byMat[m] = (byMat[m]||0) + roomArea(r.id, r.poly); });
   const matRows = Object.entries(byMat).map(([m,a]) => {
     return `<tr><td><span class="sw" style="background:${MATS[m].sw}"></span>${nm(MATS[m].name)}</td><td class="r">${fmt(a,1)} m²</td></tr>`; }).join('');
   const dem = state.demolished.map(id => WALLS[+id.slice(1)]);
@@ -1139,6 +1152,8 @@ function bindOverview(){
 function bindBlankPanel(){
   const d = $('#blankDraw'); if (d) d.onclick = () => setTool('drawwall');
   const u = $('#blankUpload'); if (u) u.onclick = () => $('#fileImg').click();
+  document.querySelectorAll('.rNameIn').forEach(inp => inp.onchange = e => { const id = e.target.dataset.rid, v = e.target.value.trim(); mutate(() => { state.rooms[id] = {...(state.rooms[id]||{})}; if (v) state.rooms[id].name = v; else delete state.rooms[id].name; }); });
+  document.querySelectorAll('.rAreaIn').forEach(inp => inp.onchange = e => { const id = e.target.dataset.rid, v = parseFloat(e.target.value); mutate(() => { state.rooms[id] = {...(state.rooms[id]||{})}; if (isFinite(v) && v > 0) state.rooms[id].area = v; else delete state.rooms[id].area; }); });
 }
 
 // 底部浮动工具条：触屏没有键盘，旋转 / 复制 / 删除都放在这里
@@ -1195,10 +1210,11 @@ function syncPaneBtns(){
 function closeDrawers(){ if (narrow()) drawer(null); }
 
 function roomPanel(r){
-  const st = state.rooms[r.id], a = area(r.poly), [x0,y0,x1,y1] = bbox(r.poly), inside = state.furniture.filter(f => f.cx>x0&&f.cx<x1&&f.cy>y0&&f.cy<y1);
+  const st = state.rooms[r.id], a = roomArea(r.id, r.poly), [x0,y0,x1,y1] = bbox(r.poly), inside = state.furniture.filter(f => f.cx>x0&&f.cx<x1&&f.cy>y0&&f.cy<y1);
   const mats = Object.entries(MATS).map(([k,m]) => `<button class="mat ${k===st.mat?'on':''}" data-mat="${k}"><i style="background:${m.sw}"></i><span>${nm(m.name)}</span></button>`).join('');
   return `<section><h3>${tr('房间','Room')}</h3>
-    <div class="form"><label class="full">${tr('名称','Name')}<input id="rName" value="${esc(nm(st.name))}"></label></div>
+    <div class="form"><label class="full">${tr('名称','Name')}<input id="rName" value="${esc(nm(st.name))}"></label>
+      <label class="full">${tr('面积手动输入','Manual area')} (m²)<input id="rArea" type="number" step="0.01" value="${a.toFixed(2)}"></label></div>
     <div class="stats" style="margin-top:10px">
       <div><small>${tr('使用面积','Floor area')}</small><span class="big">${fmt(a)}</span> m²</div>
       <div><small>${tr('周长','Perimeter')}</small><span class="big">${fmt(perim(r.poly),1)}</span> m</div>
@@ -1213,6 +1229,7 @@ function roomPanel(r){
 function bindRoomPanel(){
   const id = ui.sel.id;
   $('#rName').onchange = e => mutate(() => state.rooms[id].name = e.target.value.trim() || state.rooms[id].name);
+  $('#rArea').onchange = e => { const v = parseFloat(e.target.value); mutate(() => { if (isFinite(v) && v > 0) state.rooms[id].area = v; else delete state.rooms[id].area; }); };
   document.querySelectorAll('#panel [data-mat]').forEach(b => b.onclick = () => mutate(() => state.rooms[id].mat = b.dataset.mat));
   document.querySelectorAll('#panel tr[data-fid]').forEach(tr => tr.onclick = () => select({kind:'furn', id:tr.dataset.fid}));
   $('#back').onclick = () => select(null);
@@ -1390,12 +1407,14 @@ function finishWallDraw(){
 function eraseTargetAt(e){
   const el = document.elementFromPoint(e.clientX, e.clientY);
   if (!el) return false;
+  const cl = el.closest('[data-clen]');
+  if (cl){ const i = +cl.dataset.clen; if (!isNaN(i)){ state.customWalls.splice(i,1); return true; } }
   const cw = el.closest('[data-cwall]');
   if (cw){ const i = +cw.dataset.cwall; if (!isNaN(i)){ state.customWalls.splice(i,1); return true; } }
   const mid = el.closest('[data-mid]');
   if (mid){ const i = +mid.dataset.mid; if (!isNaN(i)){ state.measures.splice(i,1); return true; } }
   const w = el.closest('[data-wall]');
-  if (w){ const id = w.dataset.wall; if (!state.demolished.includes(id)){ state.demolished.push(id); return true; } }
+  if (w){ const id = w.dataset.wall, s = state.removedWalls = state.removedWalls || []; if (!s.includes(id)){ s.push(id); const di = state.demolished.indexOf(id); if (di >= 0) state.demolished.splice(di, 1); return true; } }
   const fid = el.closest('[data-fid]');
   if (fid){ const i = state.furniture.findIndex(f => f.id === fid.dataset.fid); if (i >= 0){ state.furniture.splice(i,1); return true; } }
   return false;
@@ -1504,9 +1523,21 @@ svg.addEventListener('pointerdown', e => {
     drag = {kind:h.dataset.handle, id:ui.sel.id, sx:e.clientX, sy:e.clientY, before:snap(), moved:false};
   } else if (ui.tool === 'demolish' && t.closest('[data-wall]')){
     toggleWall(t.closest('[data-wall]').dataset.wall); return;
+  } else if (ui.tool === 'select' && t.closest('[data-clen]')){
+    const idx = +t.closest('[data-clen]').dataset.clen, w = state.customWalls[idx];
+    if (w){
+      const cur = Math.round(Math.hypot(w.bx-w.ax, w.by-w.ay));
+      const v = prompt(tr('벽 길이 입력 (mm)', 'Wall length (mm)'), cur);
+      if (v != null){ const n = parseFloat(v); if (isFinite(n) && n > 50) mutate(() => { const dx = w.bx-w.ax, dy = w.by-w.ay, L = Math.hypot(dx,dy)||1, k = n/L; w.bx = Math.round((w.ax + dx*k)/10)*10; w.by = Math.round((w.ay + dy*k)/10)*10; }); }
+    }
+    return;
   } else if (ui.tool === 'select' && t.closest('[data-mid]')){
-    const idx = +t.closest('[data-mid]').dataset.mid;
-    if (!isNaN(idx)){ mutate(() => state.measures.splice(idx,1)); toast(tr('측정값 삭제됨', 'Measurement deleted')); }
+    const idx = +t.closest('[data-mid]').dataset.mid, m = state.measures[idx];
+    if (m){
+      const cur = Math.round(Math.hypot(m.b.x-m.a.x, m.b.y-m.a.y));
+      const v = prompt(tr('거리 입력 (mm)', 'Distance (mm)'), cur);
+      if (v != null){ const n = parseFloat(v); if (isFinite(n) && n > 1) mutate(() => { const dx = m.b.x-m.a.x, dy = m.b.y-m.a.y, L = Math.hypot(dx,dy)||1, k = n/L; m.b = {x:m.a.x + dx*k, y:m.a.y + dy*k}; }); }
+    }
     return;
   } else if (ui.tool === 'select' && t.closest('[data-cwall]')){
     const idx = +t.closest('[data-cwall]').dataset.cwall;
@@ -1810,7 +1841,7 @@ $('#fileIn').onchange = e => {
 };
 $('#reset').onclick = () => { if (confirm(tr('恢复为默认设计方案？（可撤销）', 'Reset to the default design? (undoable)'))){ const b = snap(); blankMode = false; finishWallDraw(); state = defaultState(); ui.sel = null; commit(b); renderAll(); } };
 $('#clearPlan').onclick = () => { if (confirm(tr('가구와 측정만 지우고 벽은 유지할까요?', 'Clear furniture & measures only? (walls remain)'))){ const b = snap(); state.furniture = []; state.measures = []; ui.sel = null; commit(b); renderAll(); toast(tr('가구만 삭제됨', 'Furniture cleared')); } };
-$('#newBlank').onclick = () => { if (confirm(tr('기존 벽·방·가구를 모두 지우고 벽부터 새로 그릴까요?', 'Clear all existing walls/rooms/furniture and draw walls from scratch?'))){ const b = snap(); blankMode = true; finishWallDraw(); const d = defaultState(); state = {furniture:[], rooms:d.rooms, demolished:[], measures:[], customWalls:[], blankMode:true}; ui.sel = null; commit(b); renderAll(); setTool('drawwall'); toast(tr('0부터 시작: 상단 绘墙 도구로 벽을 그리세요', 'Starting from scratch: draw walls with the Draw Wall tool')); } };
+$('#newBlank').onclick = () => { if (confirm(tr('기존 벽·방·가구를 모두 지우고 벽부터 새로 그릴까요?', 'Clear all existing walls/rooms/furniture and draw walls from scratch?'))){ const b = snap(); blankMode = true; finishWallDraw(); const d = defaultState(); state = {furniture:[], rooms:d.rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], blankMode:true}; ui.sel = null; commit(b); renderAll(); setTool('drawwall'); toast(tr('0부터 시작: 상단 绘墙 도구로 벽을 그리세요', 'Starting from scratch: draw walls with the Draw Wall tool')); } };
 $('#importImg').onclick = () => $('#fileImg').click();
 $('#fileImg').onchange = e => {
   const file = e.target.files[0]; if (!file) return;
@@ -2699,7 +2730,7 @@ function buildArch(){
   });
   [...DOORS, ...SLIDES].forEach(d => { const [x0, y0, x1, y1] = d.rect; const s = box(M(x1-x0), .012, M(y1-y0), mat('#d8d0c0', {roughness:.3}), wx((x0+x1)/2), 0, wz((y0+y1)/2)); s.castShadow = false; archFloor.add(s); });
   WALLS.forEach((w, i) => {
-    if (state.demolished.includes('w'+i)) return;
+    if (state.demolished.includes('w'+i) || state.removedWalls.includes('w'+i)) return;
     wallBox(w, 0, w[4] === 'low' ? Math.min(1, top) : top);
     colliders.push([wx(w[0]), wz(w[1]), wx(w[2]), wz(w[3])]);
   });
@@ -2750,7 +2781,7 @@ function buildFurn(){
 
 function buildLabels(){
   labelG.children.slice().forEach(o => { o.element.remove(); labelG.remove(o); });
-  const base = ROOMS.map(r => ({...r, area:area(r.poly), label:nm(state.rooms[r.id].name)}));
+  const base = ROOMS.map(r => ({...r, area:roomArea(r.id, r.poly), label:nm(state.rooms[r.id].name)}));
   const rooms = blankMode ? customRooms().map(r => ({...r, label:r.name})) : base.filter(r => r.at);
   rooms.filter(r => r.at).forEach(r => {
     const el = document.createElement('div'); el.className = 'rlabel';
@@ -2770,7 +2801,7 @@ function buildLabels(){
 // 只重建变化的部分
 function sync(force){
   if (!inited || (!active && !force)) return;
-  const a = JSON.stringify([state.rooms, state.demolished, opt.cut, blankMode, state.customWalls]), f = JSON.stringify(state.furniture), l = JSON.stringify([state.rooms, opt.cut, blankMode, state.customWalls]);
+  const a = JSON.stringify([state.rooms, state.demolished, state.removedWalls, opt.cut, blankMode, state.customWalls]), f = JSON.stringify(state.furniture), l = JSON.stringify([state.rooms, opt.cut, blankMode, state.customWalls]);
   if (force || a !== sigArch){ sigArch = a; buildArch(); }
   if (force || f !== sigFurn){ sigFurn = f; buildFurn(); }
   if (force || l !== sigLabels){ sigLabels = l; buildLabels(); }
