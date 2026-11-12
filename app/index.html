@@ -1129,6 +1129,9 @@ function overviewPanel(){
   const dem = state.demolished.map(id => WALLS[+id.slice(1)]);
   const demLen = dem.reduce((a,w) => a + Math.max(w[2]-w[0], w[3]-w[1]), 0) / 1000;
   return `
+  <section><h3>${tr('처음부터 그리기','Draw from scratch')}</h3>
+    <div class="actions"><button class="btn primary" id="overviewBlank">${tr('완전 빈 도면으로 시작','Start with a completely blank plan')}</button></div>
+    <div class="muted" style="font-size:11px;margin-top:4px">${tr('현재 벽·방·가구를 모두 지우고 빈 캔버스에서 벽부터 그립니다.','Clears the current plan and starts a blank canvas for drawing walls.')}</div></section>
   <section><h3>${tr('房间面积','Room Areas')} <small>${tr('点击查看 / 更换地面','Click to view / change flooring')}</small></h3>
     <table>${rows}</table>
     <div class="total"><span>${tr('套内使用面积','Net floor area')}</span><b>${fmt(tot)} m²</b></div>
@@ -1145,6 +1148,7 @@ function overviewPanel(){
 }
 function bindOverview(){
   document.querySelectorAll('#panel tr[data-room]').forEach(tr => tr.onclick = () => { select({kind:'room', id:tr.dataset.room}); if (is3D()) window.View3D.flyToRoom(tr.dataset.room); });
+  const ob = $('#overviewBlank'); if (ob) ob.onclick = startBlank;
   $('#clearMeasure').onclick = () => state.measures.length && mutate(() => state.measures = []);
   $('#clearFurn').onclick = clearLayout;
 }
@@ -1841,7 +1845,18 @@ $('#fileIn').onchange = e => {
 };
 $('#reset').onclick = () => { if (confirm(tr('恢复为默认设计方案？（可撤销）', 'Reset to the default design? (undoable)'))){ const b = snap(); blankMode = false; finishWallDraw(); state = defaultState(); ui.sel = null; commit(b); renderAll(); } };
 $('#clearPlan').onclick = () => { if (confirm(tr('가구와 측정만 지우고 벽은 유지할까요?', 'Clear furniture & measures only? (walls remain)'))){ const b = snap(); state.furniture = []; state.measures = []; ui.sel = null; commit(b); renderAll(); toast(tr('가구만 삭제됨', 'Furniture cleared')); } };
-$('#newBlank').onclick = () => { if (confirm(tr('기존 벽·방·가구를 모두 지우고 벽부터 새로 그릴까요?', 'Clear all existing walls/rooms/furniture and draw walls from scratch?'))){ const b = snap(); blankMode = true; finishWallDraw(); const d = defaultState(); state = {furniture:[], rooms:d.rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], blankMode:true}; ui.sel = null; commit(b); renderAll(); setTool('drawwall'); toast(tr('0부터 시작: 상단 绘墙 도구로 벽을 그리세요', 'Starting from scratch: draw walls with the Draw Wall tool')); } };
+function startBlank(){
+  if (!confirm(tr('기존 벽·방·가구를 모두 지우고 벽부터 새로 그릴까요?', 'Clear all existing walls/rooms/furniture and draw walls from scratch?'))) return;
+  const b = snap(); blankMode = true; finishWallDraw();
+  const d = defaultState();
+  state = {furniture:[], rooms:d.rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], blankMode:true};
+  ui.sel = null;
+  try { localStorage.removeItem('huxing-plan-img'); } catch(e) {}
+  renderPlanImage(null);
+  commit(b); renderAll(); setTool('drawwall');
+  toast(tr('0부터 시작: 벽을 그려보세요', 'Starting from scratch: draw your walls'));
+}
+$('#newBlank').onclick = startBlank;
 $('#importImg').onclick = () => $('#fileImg').click();
 $('#fileImg').onchange = e => {
   const file = e.target.files[0]; if (!file) return;
