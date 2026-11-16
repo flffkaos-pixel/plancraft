@@ -276,10 +276,11 @@ gtag('config', 'G-R44V8XVC81');
       <button class="btn on" data-tool="select" title="选择 / 移动 (V)" data-en-title="Select / Move (V)" data-en="Select">选择</button>
       <button class="btn" data-tool="measure" title="测量 (M)" data-en-title="Measure (M)" data-en="Measure">测量</button>
       <button class="btn" data-tool="demolish" title="拆改非承重墙 (X)" data-en-title="Demolish non-bearing walls (X)" data-en="Demolish">拆改墙体</button>
-      <button class="btn" data-tool="drawwall" title="绘制墙体 (W)" data-en-title="Draw wall (W)" data-en="Draw Wall">绘墙</button>
-      <button class="btn" data-tool="door" title="문 넣기 (D)" data-en-title="Add door (D)" data-en="Door">门</button>
-      <button class="btn" data-tool="window" title="창문 넣기 (N)" data-en-title="Add window (N)" data-en="Window">窗</button>
-      <button class="btn" data-tool="erase" title="拖动擦除 (E)" data-en-title="Drag to erase (E)" data-en="Eraser">擦除</button>
+      <button class="btn" data-tool="drawwall" title="벽 그리기 (W)" data-en-title="Draw wall (W)" data-en="Draw Wall">벽 그리기</button>
+      <button class="btn" data-tool="door" title="문 넣기 (D)" data-en-title="Add door (D)" data-en="Door">문</button>
+      <button class="btn" data-tool="window" title="창문 넣기 (N)" data-en-title="Add window (N)" data-en="Window">창문</button>
+      <button class="btn" data-tool="floor" title="바닥 그리기 (B)" data-en-title="Draw floor (B)" data-en="Floor">바닥</button>
+      <button class="btn" data-tool="erase" title="드래그로 지우기 (E)" data-en-title="Drag to erase (E)" data-en="Eraser">지우개</button>
     </div>
     <div class="grp only2d">
       <button class="btn" id="zoomOut" title="缩小" data-en-title="Zoom out">−</button>
@@ -333,7 +334,7 @@ gtag('config', 'G-R44V8XVC81');
         <button class="btn" id="exportJson" data-en="Export plan JSON">导出方案 JSON</button>
         <button class="btn" id="importJson" data-en="Import plan">导入方案</button>
         <button class="btn" id="importImg" data-en="Upload plan image">上传平面图</button>
-        <button class="btn" id="newBlank" data-en="New blank project — draw from scratch">新建空白项目（0부터 설계）</button>
+        <button class="btn" id="newBlank" data-en="New blank project — draw from scratch">빈 도면 (0부터 설계)</button>
         <button class="btn danger" id="reset" data-en="Reset to default">重置为默认方案</button>
         <button class="btn" id="clearPlan" data-en="Clear furniture only">仅清除家具</button>
       </div></details>
@@ -355,6 +356,7 @@ gtag('config', 'G-R44V8XVC81');
       <defs id="defs"></defs>
       <g id="gBg"></g>
       <g id="gGrid"></g>
+      <g id="gFloors"></g>
       <g id="gRooms"></g>
       <g id="gFurn"></g>
       <g id="gWalls"></g>
@@ -363,6 +365,7 @@ gtag('config', 'G-R44V8XVC81');
       <g id="gDims" pointer-events="none"></g>
       <g id="gMeasure" pointer-events="none"></g>
       <g id="gPrev" pointer-events="none"></g>
+      <g id="gPrevFloor" pointer-events="none"></g>
       <g id="gSel"></g>
     </svg>
     <div id="view3d">
@@ -601,7 +604,7 @@ function defaultFurniture(){ return [
 
 function defaultState(){
   const rooms = {}; ROOMS.forEach(r => rooms[r.id] = {name:r.name, mat:r.mat});
-  return {furniture:defaultFurniture(), rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], customOpenings:[], blankMode:false};
+  return {furniture:defaultFurniture(), rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], customOpenings:[], customFloors:[], blankMode:false};
 }
 
 const STORE = 'huxing-design-v2';
@@ -618,6 +621,7 @@ function fixState(s){
     if (w && typeof w.x0 === 'number') return {ax:w.x0, ay:w.y0, bx:w.x1, by:w.y1, t:w.t};
     return null;
   }).filter(Boolean).map(w => { if (!w.t || w.t < 60) w.t = 120; if (!w.id) w.id = newWallId(); return w; });
+  s.customFloors = (s.customFloors || []).filter(f => f && Array.isArray(f.poly) && f.poly.length >= 3).map(f => ({ id: f.id || ('fl' + Math.random().toString(36).slice(2, 7)), poly: f.poly.map(p => [+p[0], +p[1]]), mat: MATS[f.mat] ? f.mat : 'tile800' }));
   s.customOpenings = (s.customOpenings || []).filter(o => o && o.wallId && s.customWalls.some(w => w.id === o.wallId)).map(o => ({
     id: o.id || ('op' + Math.random().toString(36).slice(2, 7)), wallId: o.wallId,
     type: o.type === 'window' ? 'window' : 'door', t: Math.max(0, Math.min(1, +o.t || 0)),
@@ -644,6 +648,7 @@ let view = {x0:0, y0:0, s:.06};
 let blankMode = !!state.blankMode;
 let wallDrawPoints = [];
 let wallHover = null;
+let floorDrawPoints = [], floorHover = null;
 let erasing = false, eraseBefore = null, erased = false, eraseSkipWalls = new Set();
 const undoStack = [], redoStack = [];
 
@@ -902,6 +907,42 @@ function furnSVG(t,w,d,c){
 
 /* ======================= 渲染 ======================= */
 const NOLABEL = ['plant','floorlamp','sidetable','barstool','beanbag'];
+function renderFloors(){
+  const g = $('#gFloors'); if (!g) return;
+  g.innerHTML = (state.customFloors||[]).map(f => `<polygon class="cfloor" data-floor="${f.id}" points="${f.poly.map(p=>p.join(',')).join(' ')}" fill="url(#m-${f.mat})" opacity=".92" stroke="#cfc6b7" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
+}
+function snapFloorPoint(p){
+  const g = grid(), tol = 12/view.s; let best = null, bd = tol*tol;
+  const tryPt = e => { const d = (e[0]-p.x)*(e[0]-p.x) + (e[1]-p.y)*(e[1]-p.y); if (d < bd){ bd = d; best = {x:e[0], y:e[1]}; } };
+  (state.customWalls||[]).forEach(w => { tryPt([w.ax,w.ay]); tryPt([w.bx,w.by]); });
+  (state.customFloors||[]).forEach(f => f.poly.forEach(tryPt));
+  if (best) return best;
+  return {x:Math.round(p.x/g)*g, y:Math.round(p.y/g)*g};
+}
+function renderFloorPreview(){
+  const el = $('#gPrevFloor'); if (!el) return;
+  if (ui.tool !== 'floor' || !floorDrawPoints.length){ el.innerHTML = ''; return; }
+  const k = 1/view.s, pts = floorDrawPoints.map(p => `${p.x},${p.y}`).join(' ');
+  const h = floorHover;
+  let s = floorDrawPoints.length >= 2 ? `<polygon points="${pts}" fill="rgba(181,101,58,.12)" stroke="none"/>` : '';
+  s += `<polyline points="${pts}" fill="none" stroke="#b5653a" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`;
+  if (h && (h.x !== floorDrawPoints[floorDrawPoints.length-1].x || h.y !== floorDrawPoints[floorDrawPoints.length-1].y)){
+    const last = floorDrawPoints[floorDrawPoints.length-1], L = Math.hypot(h.x-last.x, h.y-last.y), fs = 12*k;
+    s += `<line x1="${last.x}" y1="${last.y}" x2="${h.x}" y2="${h.y}" stroke="#b5653a" stroke-width="1.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`;
+    if (L > 40) s += `<text x="${(last.x+h.x)/2}" y="${(last.y+h.y)/2-5*k}" font-size="${fs}" text-anchor="middle" fill="#b5653a" font-weight="600" stroke="#fff" stroke-width="${3.5*k}" paint-order="stroke">${Math.round(L)} mm</text>`;
+  }
+  s += floorDrawPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="${4*k}" fill="#b5653a"/>`).join('');
+  el.innerHTML = s;
+}
+function finishFloorDraw(){
+  if (floorDrawPoints.length >= 3){
+    const bkp = snap();
+    (state.customFloors = state.customFloors || []).push({id:'fl'+Math.random().toString(36).slice(2,7), poly:floorDrawPoints.map(p => [p.x, p.y]), mat:'tile800'});
+    commit(bkp); renderAll(); toast(tr('바닥 추가됨','Floor added'));
+  }
+  floorDrawPoints = []; floorHover = null;
+  renderFloorPreview();
+}
 function renderRooms(){
   if(blankMode){ $('#gRooms').innerHTML = customRooms().map(r => `<polygon class="room" data-room="${r.id}" points="${r.poly.map(p=>p.join(',')).join(' ')}" fill="url(#m-${r.mat})" opacity=".9"/>`).join(''); return; }
   let s = '';
@@ -1087,7 +1128,7 @@ function renderSel(){
 }
 
 function renderAll(){
-  renderGrid(); renderRooms(); renderFurn(); renderWalls(); renderOpenings(); renderLabels(); renderDims(); renderMeasure(); renderSel(); renderWallPreview(); renderPanel(); updateHeader();
+  renderGrid(); renderFloors(); renderRooms(); renderFurn(); renderWalls(); renderOpenings(); renderLabels(); renderDims(); renderMeasure(); renderSel(); renderWallPreview(); renderFloorPreview(); renderPanel(); updateHeader();
   window.View3D?.sync();
 }
 
@@ -1096,7 +1137,7 @@ function updateHeader(){
     const rs = customRooms(), tot = rs.reduce((a,r) => a + r.area, 0);
     $('#subtitle').textContent = rs.length
       ? trf('빈 캔버스 · {}개 방 · {} m² · 단위 mm', 'Blank canvas · {} room(s) · {} m² · units mm', rs.length, fmt(tot))
-      : tr('빈 캔버스 · 绘墙 으로 벽부터 설계 · 단위 mm', 'Blank canvas · draw walls from scratch · units mm');
+      : tr('빈 캔버스 · 벽 그리기로 벽부터 설계 · 단위 mm', 'Blank canvas · draw walls from scratch · units mm');
   } else {
     const tot = ROOMS.filter(r => r.counted !== false).reduce((a,r) => a + area(r.poly), 0);
     $('#subtitle').textContent = trf(`套内使用面积约 {} m² · 尺寸单位 mm · 原图比例 1:60`, `Net floor area ≈ {} m² · Units: mm · Original scale 1:60`, fmt(tot));
@@ -1120,7 +1161,7 @@ function renderPanel(){
 function blankPanel(){
   const n = (state.customWalls||[]).length;
   return `<section><h3>${tr('새 설계','New design')}</h3>
-    <div class="muted">${tr('기본 골조가 없는 빈 캔버스입니다. 아래 绘墙 시작 을 누르고 화면을 클릭하면 벽이 연속으로 그려집니다. 자동으로 직각·45°·끝점에 스냅되며, 종료는 Esc·우클릭·더블클릭입니다.', 'Empty canvas with no base framework. Press Start drawing walls and click to chain walls. It snaps to orthogonal/45°/endpoints; finish with Esc, right-click or double-click.')}</div>
+    <div class="muted">${tr('기본 골조가 없는 빈 캔버스입니다. 아래 벽 그리기 시작 을 누르고 화면을 클릭하면 벽이 연속으로 그려집니다. 자동으로 직각·45°·끝점에 스냅되며, 종료는 Esc·우클릭·더블클릭입니다.', 'Empty canvas with no base framework. Press Start drawing walls and click to chain walls. It snaps to orthogonal/45°/endpoints; finish with Esc, right-click or double-click.')}</div>
     <div class="stats" style="margin-top:10px">
       <div><small>${tr('그린 벽','Walls drawn')}</small><span class="big">${n}</span></div>
       <div><small>${tr('房间','Rooms')}</small><span class="big">${customRooms().length}</span></div>
@@ -1128,15 +1169,21 @@ function blankPanel(){
       <div><small>${tr('가구','Furniture')}</small><span class="big">${state.furniture.length}</span></div>
     </div>
     <div class="actions" style="margin-top:10px">
-      <button class="btn" id="blankDraw">${tr('绘墙 시작','Start drawing walls')}</button>
+      <button class="btn" id="blankDraw">${tr('벽 그리기 시작','Start drawing walls')}</button>
+      <button class="btn" id="blankFloor">${tr('바닥 그리기','Draw floor')}</button>
       <button class="btn" id="blankUpload">${tr('배경 이미지 업로드','Upload background image')}</button>
     </div>
-    <div class="muted" style="margin-top:8px">${tr('벽 길이 숫자를 클릭하면 길이를 다시 입력할 수 있습니다 · 벽 몸통을 选择 도구로 클릭하면 삭제됩니다.', 'Click a wall length number to type a new length · click a wall body with the Select tool to delete it.')}</div>
+    <div class="muted" style="margin-top:8px">${tr('벽 길이 숫자를 클릭하면 길이를 다시 입력할 수 있습니다 · 벽 몸통을 선택 도구로 클릭하면 삭제됩니다.', 'Click a wall length number to type a new length · click a wall body with the Select tool to delete it.')}</div>
     ${customRooms().length ? `<h3 style="margin-top:14px">${tr('방 이름 / 면적','Room name / area')}</h3>
       ${customRooms().map(r => { const meta = state.rooms[r.id] || {}; return `<div class="form" style="margin-bottom:6px">
         <label class="full">${tr('이름','Name')}<input class="rNameIn" data-rid="${r.id}" value="${esc(meta.name || r.name)}"></label>
         <label>${tr('면적','Area')} (m²)<input class="rAreaIn" data-rid="${r.id}" type="number" step="0.01" value="${(typeof meta.area === 'number' ? meta.area : r.area).toFixed(2)}"></label>
       </div>`; }).join('')}` : ''}
+    ${(state.customFloors||[]).length ? `<h3 style="margin-top:14px">${tr('바닥','Floors')}</h3>
+      ${(state.customFloors||[]).map(f => `<div class="form" style="margin-bottom:6px">
+        <label>${tr('재질','Material')}<select class="fMat" data-fid="${f.id}">${Object.entries(MATS).map(([k,m]) => `<option value="${k}" ${k===f.mat?'selected':''}>${nm(m.name)}</option>`).join('')}</select></label>
+        <button class="btn danger" data-fdel="${f.id}">${tr('삭제','Delete')}</button>
+      </div>`).join('')}` : ''}
   </section>`;
 }
 
@@ -1205,7 +1252,10 @@ function bindOverview(){
 
 function bindBlankPanel(){
   const d = $('#blankDraw'); if (d) d.onclick = () => setTool('drawwall');
+  const fl = $('#blankFloor'); if (fl) fl.onclick = () => setTool('floor');
   const u = $('#blankUpload'); if (u) u.onclick = () => $('#fileImg').click();
+  document.querySelectorAll('.fMat').forEach(sel => sel.onchange = e => { const id = e.target.dataset.fid; mutate(() => { const f = (state.customFloors||[]).find(x => x.id === id); if (f) f.mat = e.target.value; }); });
+  document.querySelectorAll('[data-fdel]').forEach(btn => btn.onclick = e => { const id = e.target.dataset.fdel; mutate(() => state.customFloors = (state.customFloors||[]).filter(x => x.id !== id)); });
   document.querySelectorAll('.rNameIn').forEach(inp => inp.onchange = e => { const id = e.target.dataset.rid, v = e.target.value.trim(); mutate(() => { state.rooms[id] = {...(state.rooms[id]||{})}; if (v) state.rooms[id].name = v; else delete state.rooms[id].name; }); });
   document.querySelectorAll('.rAreaIn').forEach(inp => inp.onchange = e => { const id = e.target.dataset.rid, v = parseFloat(e.target.value); mutate(() => { state.rooms[id] = {...(state.rooms[id]||{})}; if (isFinite(v) && v > 0) state.rooms[id].area = v; else delete state.rooms[id].area; }); });
 }
@@ -1365,6 +1415,7 @@ function toggleWall(id){
 function setTool(t){
   ui.tool = t; ui.mA = null; ui.mCur = null;
   if (t !== 'drawwall'){ wallDrawPoints = []; wallHover = null; renderWallPreview(); }
+  if (t !== 'floor'){ floorDrawPoints = []; floorHover = null; renderFloorPreview(); }
   if (t !== 'erase'){ erasing = false; eraseBefore = null; erased = false; }
   svg.setAttribute('class', 'tool-' + t);
   document.querySelectorAll('#tools .btn').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
@@ -1375,10 +1426,11 @@ function syncModeHint(){
   const hints = {select:'',
     measure:COARSE ? tr('按住拖出测量线，或依次点两点 · 靠近墙面自动吸附 · 点「选择」退出', 'Hold and drag a line, or tap two points · snaps to walls · tap "Select" to exit')
       : tr('点击两点（或按住拖动）测量距离 · 靠近墙面自动吸附 · Shift 锁定水平/垂直 · Esc 取消', 'Click two points (or drag) to measure · snaps to walls · Shift locks horizontal/vertical · Esc cancels'),
-    demolish:tr('내력벽·외벽 포함 모든 벽을 클릭해 철거 표시/복원 · 바닥은 房间 속성에서 없음 선택', 'Click any wall (including bearing/exterior) to mark for removal / restore · set floor to None in Room properties'),
-    drawwall:tr('클릭으로 벽을 연속해서 그리기 · 자동 스냅(직각/45°/끝점) · Esc·우클릭·더블클릭으로 종료 · 选择 도구로 벽 클릭 시 삭제', 'Click to chain walls · auto snap (orthogonal/45°/endpoints) · finish with Esc / right-click / double-click · click a wall with Select to delete'),
-    door:tr('벽을 클릭해 문 배치(기본 900mm) · 选择 도구로 숫자 클릭하면 폭 수정 · 擦除 도구로 삭제', 'Click a wall to place a door (900mm) · with Select, click its number to edit width · use Eraser to delete'),
-    window:tr('벽을 클릭해 창문 배치(기본 1200mm) · 选择 도구로 숫자 클릭하면 폭 수정 · 擦除 도구로 삭제', 'Click a wall to place a window (1200mm) · with Select, click its number to edit width · use Eraser to delete'),
+    demolish:tr('내력벽·외벽 포함 모든 벽을 클릭해 철거 표시/복원 · 바닥은 방 속성에서 없음 선택', 'Click any wall (including bearing/exterior) to mark for removal / restore · set floor to None in Room properties'),
+    drawwall:tr('클릭으로 벽을 연속해서 그리기 · 자동 스냅(직각/45°/끝점) · Esc·우클릭·더블클릭으로 종료 · 선택 도구로 벽 클릭 시 삭제', 'Click to chain walls · auto snap (orthogonal/45°/endpoints) · finish with Esc / right-click / double-click · click a wall with Select to delete'),
+    door:tr('벽을 클릭해 문 배치(기본 900mm) · 선택 도구로 숫자 클릭하면 폭 수정 · 지우개 도구로 삭제', 'Click a wall to place a door (900mm) · with Select, click its number to edit width · use Eraser to delete'),
+    window:tr('벽을 클릭해 창문 배치(기본 1200mm) · 선택 도구로 숫자 클릭하면 폭 수정 · 지우개 도구로 삭제', 'Click a wall to place a window (1200mm) · with Select, click its number to edit width · use Eraser to delete'),
+    floor:tr('클릭으로 바닥 외곽을 그리기 · 첫 점/우클릭/더블클릭/Esc 로 닫기 · 선택 도구로 폴리곤 클릭 시 삭제', 'Click to outline a floor · close with first point / right-click / double-click / Esc · click it with Select to delete'),
     erase:tr('누른 채 드래그하면 지나가는 벽·가구·측정을 삭제 · 내력벽은 철거 표시', 'Drag while holding to erase walls, furniture and measurements you pass over · bearing walls get marked for removal')};
   const h = $('#modehint'); h.textContent = hints[ui.tool]; h.classList.toggle('show', !!hints[ui.tool]);
 }
@@ -1463,6 +1515,8 @@ function finishWallDraw(){
 function eraseTargetAt(e){
   const el = document.elementFromPoint(e.clientX, e.clientY);
   if (!el) return false;
+  const fl = el.closest('[data-floor]');
+  if (fl){ const id = fl.dataset.floor, i = (state.customFloors||[]).findIndex(f => f.id === id); if (i >= 0){ state.customFloors.splice(i,1); return true; } }
   const op = el.closest('[data-olen]');
   if (op){ const id = op.dataset.olen, i = (state.customOpenings||[]).findIndex(o => o.id === id); if (i >= 0){ const o = state.customOpenings[i]; eraseSkipWalls.add(o.wallId); state.customOpenings.splice(i,1); return true; } }
   const cl = el.closest('[data-clen]');
@@ -1574,6 +1628,13 @@ svg.addEventListener('pointerdown', e => {
     toast(ui.tool === 'window' ? tr('창문 추가됨', 'Window added') : tr('문 추가됨', 'Door added'));
     return;
   }
+  if (ui.tool === 'floor'){
+    const q = snapFloorPoint(p);
+    if (floorDrawPoints.length >= 3 && Math.hypot(q.x-floorDrawPoints[0].x, q.y-floorDrawPoints[0].y) < 300){ finishFloorDraw(); return; }
+    floorDrawPoints.push(q); floorHover = q; renderFloorPreview();
+    if (floorDrawPoints.length === 1) toast(tr('바닥 시작점 · 계속 클릭해 외곽을 그리세요 · 닫기: 첫 점/우클릭/더블클릭/Esc', 'Floor start point · keep clicking to outline · close: first point / right-click / double-click / Esc'));
+    return;
+  }
   if (ui.tool === 'measure'){
     const q = snapPoint(p, e.shiftKey);
     if (!ui.mA){ ui.mA = q; ui.mCur = q; drag = {kind:'measure', sx:e.clientX, sy:e.clientY, moved:false}; svg.setPointerCapture(e.pointerId); }
@@ -1599,6 +1660,11 @@ svg.addEventListener('pointerdown', e => {
       const v = prompt(tr('벽 길이 입력 (mm)', 'Wall length (mm)'), cur);
       if (v != null){ const n = parseFloat(v); if (isFinite(n) && n > 50) mutate(() => { const dx = w.bx-w.ax, dy = w.by-w.ay, L = Math.hypot(dx,dy)||1, k = n/L; w.bx = Math.round((w.ax + dx*k)/10)*10; w.by = Math.round((w.ay + dy*k)/10)*10; }); }
     }
+    return;
+  } else if (ui.tool === 'select' && t.closest('[data-floor]')){
+    const id = t.closest('[data-floor]').dataset.floor;
+    mutate(() => state.customFloors = (state.customFloors||[]).filter(f => f.id !== id));
+    toast(tr('바닥 삭제됨', 'Floor removed'));
     return;
   } else if (ui.tool === 'select' && t.closest('[data-olen]')){
     const o = (state.customOpenings||[]).find(o => o.id === t.closest('[data-olen]').dataset.olen);
@@ -1660,6 +1726,7 @@ svg.addEventListener('pointermove', e => {
     }
     $('#hover').innerHTML = hover;
     if (ui.tool === 'drawwall' && wallDrawPoints.length){ wallHover = snapWallPoint(p); renderWallPreview(); }
+    if (ui.tool === 'floor' && floorDrawPoints.length){ floorHover = snapFloorPoint(p); renderFloorPreview(); }
     if (ui.tool === 'measure' && ui.mA){ ui.mCur = snapPoint(p, e.shiftKey); renderMeasure(); }
     return;
   }
@@ -1715,10 +1782,12 @@ svg.addEventListener('wheel', e => {
 }, {passive:false});
 svg.addEventListener('dblclick', e => {
   if (ui.tool==='drawwall'){ e.preventDefault(); finishWallDraw(); return; }
+  if (ui.tool==='floor'){ e.preventDefault(); finishFloorDraw(); return; }
   if (ui.tool==='select' && e.target.closest('[data-fid]')) rotateSel(90);
 });
 svg.addEventListener('contextmenu', e => {
   if (ui.tool==='drawwall'){ e.preventDefault(); finishWallDraw(); return; }
+  if (ui.tool==='floor'){ e.preventDefault(); finishFloorDraw(); return; }
   if (ui.tool==='measure'){ e.preventDefault(); ui.mA = null; renderMeasure(); }
 });
 
@@ -1742,12 +1811,14 @@ document.addEventListener('keydown', e => {
   else if (k === 'w') setTool('drawwall');
   else if (k === 'd') setTool('door');
   else if (k === 'n') setTool('window');
+  else if (k === 'b') setTool('floor');
   else if (k === 'e') setTool('erase');
   else if (k === 'f') fitView();
   else if (k === 'r') rotateSel(e.shiftKey ? -90 : 90);
   else if (k === 'delete' || k === 'backspace'){ e.preventDefault(); deleteSel(); }
   else if (k === 'escape'){
     if (wallDrawPoints.length) finishWallDraw();
+    else if (floorDrawPoints.length) finishFloorDraw();
     else if (ui.mA){ ui.mA = null; renderMeasure(); }
     else { if (ui.tool !== 'select') setTool('select'); select(null); }
   }
@@ -1864,7 +1935,7 @@ const TIPS = () => COARSE
 async function setView(m){
   if (m === viewMode || switching) return;
   if (!window.View3D) return toast(tr('3D 引擎仍在加载或加载失败（需要联网加载 three.js）', '3D engine is still loading or failed to load (three.js needs a network connection)'));
-  if (m === '3d' && blankMode && !(state.customWalls||[]).length){ switching = false; document.body.classList.remove('busy'); return toast(tr('먼저 绘墙 도구로 벽을 그려주세요', 'Draw some walls first with the Draw Wall tool')); }
+  if (m === '3d' && blankMode && !(state.customWalls||[]).length){ switching = false; document.body.classList.remove('busy'); return toast(tr('먼저 벽 그리기 도구로 벽을 그려주세요', 'Draw some walls first with the Draw Wall tool')); }
   switching = true; document.body.classList.add('busy');
   viewMode = m;
   if (m === '3d'){ if (ui.tool !== 'select') setTool('select'); ui.mA = null; document.body.classList.add('m3d'); await window.View3D.enter(); }
@@ -1932,7 +2003,7 @@ function startBlank(){
   if (!confirm(tr('기존 벽·방·가구를 모두 지우고 벽부터 새로 그릴까요?', 'Clear all existing walls/rooms/furniture and draw walls from scratch?'))) return;
   const b = snap(); blankMode = true; finishWallDraw();
   const d = defaultState();
-  state = {furniture:[], rooms:d.rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], customOpenings:[], blankMode:true};
+  state = {furniture:[], rooms:d.rooms, demolished:[], removedWalls:[], measures:[], customWalls:[], customOpenings:[], customFloors:[], blankMode:true};
   ui.sel = null;
   try { localStorage.removeItem('huxing-plan-img'); } catch(e) {}
   renderPlanImage(null);
@@ -2833,6 +2904,7 @@ function buildArch(){
   const top = opt.cut;
   if (blankMode){
     customRooms().forEach(r => addCustomFloor(r, top));
+    (state.customFloors||[]).forEach(f => addCustomFloor({poly:f.poly, mat:f.mat}, top));
     (state.customWalls||[]).forEach(w => addCustomWall(w, top));
     applyLight(); applyGrow(); return;
   }
@@ -2893,6 +2965,7 @@ function buildArch(){
       [-1, 1].forEach(e => { const fr = new THREE.Mesh(new THREE.BoxGeometry(.04, ph, .04), frameMat); fr.position.set(v ? x : x + e*pl/2, ph/2, v ? z + e*pl/2 : z); archUp.add(fr); });
     });
   });
+  (state.customFloors||[]).forEach(f => addCustomFloor({poly:f.poly, mat:f.mat}, top));
   (state.customWalls||[]).forEach(w => addCustomWall(w, top));
   applyLight(); applyGrow();
 }
@@ -2925,7 +2998,7 @@ function buildLabels(){
 // 只重建变化的部分
 function sync(force){
   if (!inited || (!active && !force)) return;
-  const a = JSON.stringify([state.rooms, state.demolished, state.removedWalls, opt.cut, blankMode, state.customWalls, state.customOpenings]), f = JSON.stringify(state.furniture), l = JSON.stringify([state.rooms, opt.cut, blankMode, state.customWalls, state.customOpenings]);
+  const a = JSON.stringify([state.rooms, state.demolished, state.removedWalls, opt.cut, blankMode, state.customWalls, state.customOpenings, state.customFloors]), f = JSON.stringify(state.furniture), l = JSON.stringify([state.rooms, opt.cut, blankMode, state.customWalls, state.customOpenings, state.customFloors]);
   if (force || a !== sigArch){ sigArch = a; buildArch(); }
   if (force || f !== sigFurn){ sigFurn = f; buildFurn(); }
   if (force || l !== sigLabels){ sigLabels = l; buildLabels(); }
