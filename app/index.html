@@ -40,11 +40,14 @@ button,input,select{font:inherit;color:inherit}
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input{-webkit-user-select:text;user-select:text}
-header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 14px;
+header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 14px;
   background:var(--panel);border-bottom:1px solid var(--line)}
+header .btn{padding:5px 8px;text-align:center}
+header summary{text-align:center}
 .brand{display:flex;flex-direction:column;margin-right:8px;line-height:1.25}
 .brand b{font-size:15px;letter-spacing:.5px}
 .brand span{color:var(--muted);font-size:12px}
+.brand b,.brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #home{border:1px solid var(--line);background:var(--surface);text-decoration:none;color:var(--fg);
   font-weight:600;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:6px}
 #home:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
@@ -60,8 +63,8 @@ header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 1
 .spacer{flex:1}
 aside{background:var(--panel);overflow:auto;border-right:1px solid var(--line)}
 aside.right{border-right:0;border-left:1px solid var(--line)}
-.lib h4{margin:0;padding:12px 14px 6px;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:1px}
-.lib-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 10px 6px}
+.lib h4{margin:0;padding:12px 14px 6px;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 10px 6px}
 .lib h4{position:sticky;top:0;z-index:1;background:var(--panel)}
 .item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px 6px;border:1px solid var(--line);
   border-radius:8px;background:var(--surface);cursor:grab;user-select:none;touch-action:pan-y;transition:border-color .15s,transform .15s}
@@ -70,7 +73,7 @@ aside.right{border-right:0;border-left:1px solid var(--line)}
 #ghost{position:fixed;left:0;top:0;z-index:30;pointer-events:none;opacity:.8;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 10px rgba(0,0,0,.45))}
 #ghost svg{width:100%;height:100%;display:block;overflow:visible}
 .item svg{width:56px;height:44px}
-.item b{font-weight:500;font-size:12px}
+.item b{font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .item small{color:var(--muted);font-size:11px}
 .hint{padding:10px 14px 16px;color:var(--muted);font-size:12px}
 main{position:relative;overflow:hidden;background:var(--paper)}
@@ -98,6 +101,11 @@ main{position:relative;overflow:hidden;background:var(--paper)}
 footer{grid-column:1/-1;display:flex;gap:18px;align-items:center;padding:0 14px;background:var(--panel);overflow:hidden;white-space:nowrap;
   border-top:1px solid var(--line);color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 #tip{overflow:hidden;text-overflow:ellipsis}
+footer .spacer{flex:0 0 10px}
+footer #tip{flex:1 1 0;min-width:0;text-align:right}
+footer #cx,footer #cy,footer #ratio{display:inline-block;text-align:right}
+footer #cx,footer #cy{min-width:48px}
+footer #ratio{min-width:40px}
 footer b{color:var(--fg);font-weight:500}
 #panel section{padding:12px 16px;border-bottom:1px solid var(--line)}
 #panel h3{margin:0 0 8px;font-size:13px}
@@ -172,8 +180,9 @@ main.animating #hint3d{opacity:0}
 .rlabel{font-size:12px;font-weight:600;color:#2b2824;background:rgba(255,255,255,.92);border:1px solid var(--line-paper);
   border-radius:12px;padding:2px 9px;white-space:nowrap;pointer-events:none}
 .rlabel small{font-weight:400;color:#6d655a;margin-left:4px}
-#roomList{padding:0 10px 6px;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+#roomList{padding:0 10px 6px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
 #roomList button{display:flex;flex-direction:column;width:100%;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:5px 8px;border-radius:7px;cursor:pointer;text-align:left;line-height:1.3}
+#roomList button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%}
 #roomList button:hover{background:rgba(255,255,255,.07)}
 #roomList button.on{background:var(--accent-soft);color:var(--accent)}
 #roomList small{color:var(--muted);font-variant-numeric:tabular-nums}
@@ -241,7 +250,7 @@ main.drawer-panel #fab{opacity:0;visibility:hidden}
   aside.lib{justify-self:start;transform:translateX(-110%)}
   aside.right{justify-self:end;transform:translateX(110%)}
   aside.open{transform:none;box-shadow:0 0 30px rgba(0,0,0,.6)}
-  .lib-grid{grid-template-columns:1fr 1fr 1fr}
+  .lib-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .brand span,footer .only2d{display:none!important}
 }
 </style>
@@ -445,6 +454,63 @@ function applyStaticLang(){
   document.querySelectorAll('[data-en]').forEach(el => { el.dataset.zh ??= el.textContent; el.textContent = tr(el.dataset.zh, el.dataset.en); });
   document.querySelectorAll('[data-en-title]').forEach(el => { el.dataset.zhTitle ??= el.title; el.title = tr(el.dataset.zhTitle, el.dataset.enTitle); });
   document.querySelectorAll('#langSel [data-lang]').forEach(b => { const on = b.dataset.lang === LANG; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+}
+// 语言切换时界面位置保持不变：按韩/英/日三种文案中最宽的一个锁定每个控件的宽度
+function forceVisible(el){
+  const touched = [];
+  for(let n = el; n && n !== document.body; n = n.parentElement){
+    if(n.classList && (n.classList.contains('only2d') || n.classList.contains('only3d'))){
+      const prev = n.getAttribute('style');
+      n.style.setProperty('display', n.tagName === 'SPAN' ? 'inline' : 'flex', 'important');
+      touched.push([n, prev]);
+    }
+  }
+  return () => touched.forEach(([n,s]) => { if(s) n.setAttribute('style', s); else n.removeAttribute('style'); });
+}
+function lockWidth(el, variants){
+  if(!el || el.children.length) return;
+  const restore = forceVisible(el);
+  if(getComputedStyle(el).display === 'inline') el.style.display = 'inline-block';
+  const prevMin = el.style.minWidth; el.style.minWidth = '';
+  const cur = el.textContent;
+  let max = 0;
+  for(const v of variants){ el.textContent = v; max = Math.max(max, el.getBoundingClientRect().width); }
+  el.textContent = cur;
+  const natural = el.getBoundingClientRect().width;
+  el.style.minWidth = Math.max(max, natural, parseFloat(prevMin) || 0) + 'px';
+  restore();
+}
+function lockVariants(el){
+  const zh = el.dataset.zh, en = el.dataset.en;
+  const ko = zh != null ? (DICT.ko || {})[zh] : null;
+  const ja = zh != null ? (DICT.ja || {})[zh] : null;
+  lockWidth(el, [zh, en, ko, ja].filter(v => typeof v === 'string' && v));
+}
+function subtitleVariants(){
+  const save = LANG, out = [];
+  for(const l of ['ko','en','ja']){
+    LANG = l;
+    out.push(trf('套内使用面积约 {} m² · 尺寸单位 mm · 原图比例 1:60', 'Net floor area ≈ {} m² · Units: mm · Original scale 1:60', '102.40'));
+    out.push(tr('빈 캔버스 · 벽 그리기로 벽부터 설계 · 단위 mm', 'Blank canvas · draw walls from scratch · units mm'));
+    out.push(trf('빈 캔버스 · {}개 방 · {} m² · 단위 mm', 'Blank canvas · {} room(s) · {} m² · units mm', '12', '102.40'));
+  }
+  LANG = save;
+  return [...new Set(out)];
+}
+function lockHeaderWidths(){
+  document.querySelectorAll('header [data-en], footer [data-en]').forEach(el => {
+    if(el.children.length) return;                                  // 含子节点时不替换文本，避免破坏结构
+    lockVariants(el);
+  });
+  const sub = $('#subtitle');                                  // 副标题固定宽度，避免换行影响工具栏排布
+  if(sub){
+    sub.style.minWidth = '0px'; sub.style.maxWidth = 'none';
+    const cur = sub.textContent; let max = 0;
+    for(const v of subtitleVariants()){ sub.textContent = v; max = Math.max(max, sub.getBoundingClientRect().width); }
+    sub.textContent = cur;
+    const w = Math.min(240, Math.ceil(max));
+    sub.style.minWidth = w + 'px'; sub.style.maxWidth = w + 'px';
+  }
 }
 
 /* ============================================================
@@ -1144,6 +1210,7 @@ function updateHeader(){
   }
   $('#undo').disabled = !undoStack.length; $('#redo').disabled = !redoStack.length;
   $('#undo').style.opacity = undoStack.length ? 1 : .4; $('#redo').style.opacity = redoStack.length ? 1 : .4;
+  $('#subtitle').title = $('#subtitle').textContent;
 }
 
 /* ======================= 右侧面板 ======================= */
@@ -2040,7 +2107,7 @@ new ResizeObserver(() => {
 
 function setLang(l){
   LANG = l; try { localStorage.setItem(LANG_KEY, l); } catch(e) {}
-  applyStaticLang(); syncFullscreen(); syncModeHint(); syncPaneBtns();
+  applyStaticLang(); syncFullscreen(); lockHeaderWidths(); syncModeHint(); syncPaneBtns();
   buildLib(); renderOpenings(); renderAll();
   $('#tip').textContent = TIPS()[viewMode];
   window.View3D?.relang();
@@ -2062,7 +2129,7 @@ function renderPlanImage(dataUrl){
   g.appendChild(img);
 }
 
-applyStaticLang(); syncFullscreen();
+applyStaticLang(); syncFullscreen(); lockHeaderWidths();
 buildDefs(); buildLib(); renderOpenings(); renderDims();
 const savedImg = localStorage.getItem('huxing-plan-img');
 if(savedImg) renderPlanImage(savedImg);
