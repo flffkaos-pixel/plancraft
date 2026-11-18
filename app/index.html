@@ -65,6 +65,11 @@ aside{background:var(--panel);overflow:auto;border-right:1px solid var(--line)}
 aside.right{border-right:0;border-left:1px solid var(--line)}
 .lib h4{margin:0;padding:12px 14px 6px;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lib-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 10px 6px}
+.toolgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 10px 4px}
+.toolgrid .btn{border:1px solid var(--line);background:var(--surface);padding:7px 6px;font-size:12px;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toolgrid .btn:hover{border-color:var(--accent);color:var(--accent)}
+.toolgrid .btn.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .lib h4{position:sticky;top:0;z-index:1;background:var(--panel)}
 .item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px 6px;border:1px solid var(--line);
   border-radius:8px;background:var(--surface);cursor:grab;user-select:none;touch-action:pan-y;transition:border-color .15s,transform .15s}
@@ -353,6 +358,18 @@ gtag('config', 'G-R44V8XVC81');
   </header>
 
   <aside class="lib">
+    <div id="libTools" class="only2d">
+      <h4 data-en="Drawing tools">그리기 도구</h4>
+      <div class="toolgrid">
+        <button class="btn" data-ltool="drawwall" title="벽 그리기 (W)" data-en-title="Draw wall (W)" data-en="Wall">벽</button>
+        <button class="btn" data-ltool="door" title="문 넣기 (D)" data-en-title="Add door (D)" data-en="Door">문</button>
+        <button class="btn" data-ltool="window" title="창문 넣기 (N)" data-en-title="Add window (N)" data-en="Window">창문</button>
+        <button class="btn" data-ltool="floor" title="바닥 그리기 (B)" data-en-title="Draw floor (B)" data-en="Floor">바닥</button>
+        <button class="btn" data-ltool="erase" title="드래그로 지우기 (E)" data-en-title="Drag to erase (E)" data-en="Eraser">지우개</button>
+        <button class="btn" data-ltool="select" title="선택 / 이동 (V)" data-en-title="Select / Move (V)" data-en="Select">선택</button>
+      </div>
+      <div class="hint" style="padding:2px 14px 10px" data-en="Doors, windows and floors are placed on walls you draw yourself.">문·창문·바닥은 직접 그린 벽 위에서만 놓을 수 있습니다.</div>
+    </div>
     <div id="lib3d" class="only3d">
       <h4 data-en="Rooms · click to fly there">房间 · 点击飞到该房间</h4>
       <div id="roomList"></div>
@@ -421,8 +438,8 @@ let LANG = (() => {
   if (n.startsWith('ja')) return 'ja';
   return 'en';
 })();
-// 中文原文作为内部 key：韩/日查字典，字典缺失时退回英文（不显示中文）
-const tr = (zh, en) => { if (LANG === 'en') return en; const d = DICT[LANG] && DICT[LANG][zh]; if (d != null) return d; return /[가-힣]/.test(zh) ? zh : en; };
+// 中文原文作为内部 key：韩/日查字典，字典缺失时退回英文（不显示中文）；韩语原文缺日文时也退回英文
+const tr = (zh, en) => { if (LANG === 'en') return en; const d = DICT[LANG] && DICT[LANG][zh]; if (d != null) return d; if (LANG === 'ja') return en; return /[가-힣]/.test(zh) ? zh : en; };
 // 带占位符的文案：模板里用 {} 表示插入值，翻译后再逐个填入
 const trf = (zh, en, ...a) => { let s = tr(zh, en); for (const x of a) { const i = s.indexOf('{}'); if (i < 0) break; s = s.slice(0, i) + x + s.slice(i + 2); } return s; };
 // 内置的房间 / 材料 / 家具名称存的是中文；英文界面下显示译名，用户自己改过的名称原样显示
@@ -1237,6 +1254,8 @@ function blankPanel(){
     </div>
     <div class="actions" style="margin-top:10px">
       <button class="btn" id="blankDraw">${tr('벽 그리기 시작','Start drawing walls')}</button>
+      <button class="btn" id="blankDoor">${tr('문 넣기','Add door')}</button>
+      <button class="btn" id="blankWindow">${tr('창문 넣기','Add window')}</button>
       <button class="btn" id="blankFloor">${tr('바닥 그리기','Draw floor')}</button>
       <button class="btn" id="blankUpload">${tr('배경 이미지 업로드','Upload background image')}</button>
     </div>
@@ -1319,6 +1338,8 @@ function bindOverview(){
 
 function bindBlankPanel(){
   const d = $('#blankDraw'); if (d) d.onclick = () => setTool('drawwall');
+  const dr = $('#blankDoor'); if (dr) dr.onclick = () => setTool('door');
+  const wn = $('#blankWindow'); if (wn) wn.onclick = () => setTool('window');
   const fl = $('#blankFloor'); if (fl) fl.onclick = () => setTool('floor');
   const u = $('#blankUpload'); if (u) u.onclick = () => $('#fileImg').click();
   document.querySelectorAll('.fMat').forEach(sel => sel.onchange = e => { const id = e.target.dataset.fid; mutate(() => { const f = (state.customFloors||[]).find(x => x.id === id); if (f) f.mat = e.target.value; }); });
@@ -1486,6 +1507,7 @@ function setTool(t){
   if (t !== 'erase'){ erasing = false; eraseBefore = null; erased = false; }
   svg.setAttribute('class', 'tool-' + t);
   document.querySelectorAll('#tools .btn').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  document.querySelectorAll('#libTools .btn').forEach(b => b.classList.toggle('on', b.dataset.ltool === t));
   syncModeHint();
   renderMeasure();
 }
@@ -2014,6 +2036,7 @@ document.querySelectorAll('.menu-pop .btn').forEach(b => b.addEventListener('cli
 document.querySelectorAll('#viewSeg .btn').forEach(b => b.onclick = () => setView(b.dataset.view));
 
 document.querySelectorAll('#tools .btn').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+document.querySelectorAll('#libTools [data-ltool]').forEach(b => b.onclick = () => { setTool(b.dataset.ltool); closeDrawers(); });
 document.querySelectorAll('#layers .btn').forEach(b => b.onclick = () => {
   const k = b.dataset.layer; ui.layers[k] = !ui.layers[k]; b.classList.toggle('on', ui.layers[k]);
   if (k === 'dims') $('#gDims').setAttribute('display', ui.layers.dims ? 'inline' : 'none');
